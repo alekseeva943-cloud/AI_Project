@@ -1,54 +1,64 @@
-import asyncio
-import logging
+# gpt_service.py
+
+import os
 from openai import OpenAI
+from config.config import OPENAI_API_KEY
 
-from config.config import (
-    OPENAI_API_KEY,
-    GPT_MODEL,
-    GPT_TEMPERATURE,
-    GPT_MAX_TOKENS,
-    GPT_TIMEOUT
-)
-
-logger = logging.getLogger(__name__)
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
+MODEL = "gpt-4o-mini"
 
-async def ask_gpt(messages: list[dict]) -> str:
-    """
-    Универсальный вызов GPT.
 
+# =======================
+# 🔹 ЗАГРУЗКА ПРОМПТОВ
+# =======================
+
+# абсолютный путь к корню проекта
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def load_prompt(filename: str) -> str:
+    path = os.path.join(BASE_DIR, "prompts", filename)
+
+    with open(path, "r", encoding="utf-8") as f:
+        return f.read()
+
+
+SYSTEM_PROMPT = load_prompt("system_prompt.txt")
+TASK_PROMPT = load_prompt("task_prompt.txt")
+
+
+# =======================
+# 🔹 GPT ГЕНЕРАЦИЯ
+# =======================
+
+def generate_answer(query: str, history: list = None, context: str = None):
+
+    # 🔥 формируем task_prompt
+    if context:
+        final_task_prompt = f"{TASK_PROMPT}\n\nКонтекст:\n{context}"
+    else:
+        final_task_prompt = TASK_PROMPT
+
+    # 🔥 сообщения
     messages = [
-        {"role": "system", "content": "..."},
-        {"role": "user", "content": "..."}
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": final_task_prompt}
     ]
-    """
 
-    try:
-        response = await asyncio.wait_for(
-            asyncio.to_thread(
-                client.chat.completions.create,
-                model=GPT_MODEL,
-                messages=messages,
-                temperature=GPT_TEMPERATURE,
-                max_tokens=GPT_MAX_TOKENS
-            ),
-            timeout=GPT_TIMEOUT
-        )
+    # 🔥 история
+    if history:
+        messages.extend(history[-8:])
 
-        content = response.choices[0].message.content
+    # 🔥 текущий запрос
+    messages.append({"role": "user", "content": query})
 
-        if not content or not content.strip():
-            logger.warning("GPT вернул пустой ответ")
-            return "⚠️ Уточните, пожалуйста, вопрос"
+    # 🔥 запрос к GPT
+    response = client.chat.completions.create(
+        model=MODEL,
+        messages=messages,
+        temperature=0.7
+    )
 
-        return content.strip()
-
-    except asyncio.TimeoutError:
-        logger.warning("Таймаут GPT")
-        return "⚠️ Сервер перегружен, попробуйте ещё раз"
-
-    except Exception as e:
-        logger.error(f"Ошибка GPT: {type(e).__name__}", exc_info=True)
-        return "🔧 Ошибка сервиса"
+    return response.choices[0].message.content.strip()

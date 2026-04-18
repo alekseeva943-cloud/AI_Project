@@ -1,15 +1,12 @@
-import logging
-import json
+# gpt_chat.py
 
-from telegram import Update, KeyboardButton, ReplyKeyboardMarkup
+import logging
+import re
+
+from telegram import Update
 from telegram.ext import ContextTypes, Application
 
-from config.config import (
-    ADMIN_QUEUE,
-    SYSTEM_PROMPT,
-    CONTEXT_MESSAGE_COUNT,
-    UNCERTAIN_MESSAGE
-)
+from config.config import ADMIN_QUEUE, CONTEXT_MESSAGE_COUNT
 
 from database import (
     save_client_info,
@@ -20,27 +17,50 @@ from database import (
 )
 
 from handlers.start import start as main_menu_handler
-from services.gpt_service import ask_gpt
+from services.router_service import classify_intent
+from services.rag_service import retrieve_context
+from services.gpt_service import generate_answer
 
 logger = logging.getLogger(__name__)
 
 
 # =======================
-# 🔹 Бизнес-правила
+# 🔹 КОНСТАНТЫ (ВСЁ В ОДНОМ МЕСТЕ)
 # =======================
 
-def is_uncertain_response(text: str) -> bool:
-    triggers = ["не знаю", "не уверен", "уточните", "думаю", "скорее всего"]
-    return any(t in text.lower() for t in triggers)
+CLIENT_LEAD_RESPONSE = (
+    "Отправил ваши контакты бригаде 🚗\n"
+    "С вами скоро свяжутся и подъедут на место 👍"
+)
 
-
-def should_notify_manager(text: str) -> bool:
-    triggers = ["перезвонит", "свяжется", "мы вам позвоним", "ожидайте"]
-    return any(t in text.lower() for t in triggers)
+ADMIN_NEW_LEAD_TITLE = "📞 НОВАЯ ЗАЯВКА"
 
 
 # =======================
-# 🔹 Уведомление админов
+# 🔹 УТИЛИТЫ
+# =======================
+
+def is_phone(text: str) -> bool:
+    digits = re.sub(r"\D", "", text)
+    return len(digits) >= 10
+
+
+def format_history(history: list) -> str:
+    lines = []
+    for msg in history[-10:]:
+        role = "👤 Клиент" if msg["role"] == "user" else "🤖 Бот"
+        lines.append(f"{role}: {msg['content']}")
+    return "\n".join(lines)
+
+
+def append_if_not_duplicate(history: list, text: str) -> list:
+    if history and history[-1]["role"] == "user" and history[-1]["content"] == text:
+        return history
+    return history + [{"role": "user", "content": text}]
+
+
+# =======================
+# 🔹 УВЕДОМЛЕНИЕ АДМИНА
 # =======================
 
 async def notify_manager(context: ContextTypes.DEFAULT_TYPE, message: str):
@@ -49,103 +69,187 @@ async def notify_manager(context: ContextTypes.DEFAULT_TYPE, message: str):
     admins = get_all_admins(DB_PATH)
 
     for admin in admins:
-        admin_id = admin['user_id']
         try:
-            await context.bot.send_message(chat_id=admin_id, text=message)
+            await context.bot.send_message(
+                chat_id=admin["user_id"],
+                text=message
+            )
         except Exception:
-            ADMIN_QUEUE.setdefault(admin_id, []).append(message)
+            ADMIN_QUEUE.setdefault(admin["user_id"], []).append(message)
 
 
 # =======================
-# 🔹 GPT helper
+# 🔹 СБОРКА ЗАЯВКИ
 # =======================
 
-async def generate_gpt_answer(messages):
-    return await ask_gpt(messages)
+def build_lead_message(user, text: str, history: list) -> str:
+    username = f"@{user.username}" if user.username else "без username"
+    context_text = format_history(history)
+
+    return f"""
+{ADMIN_NEW_LEAD_TITLE}
+
+👤 {username}
+🆔 {user.id}
+🔗 tg://user?id={user.id}
+
+📩 Последнее сообщение:
+{text}
+
+📄 Диалог:
+{context_text}
+"""
 
 
 # =======================
-# 🔹 Основной handler
+# 🔹 ОСНОВНОЙ HANDLER
 # =======================
 
 async def handle_gpt_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         user = update.effective_user
-        text = update.message.text
+        message = update.message
 
-        # --- фильтр ---
-        if text.startswith('/') or text == "💬 Задать вопрос":
+        if not message:
+            return
+
+        text = message.text or ""
+
+        # --- фильтры ---
+        if text.startswith("/") or text == "💬 Задать вопрос":
             return
 
         if text == "⬅️ Вернуться":
             await main_menu_handler(update, context)
             return
 
-        # --- клиент ---
+        # --- сохраняем клиента ---
         client_info = get_client_info(user.id)
-        phone = client_info.get('phone') if client_info else None
+        phone_saved = client_info.get("phone") if client_info else None
 
         save_client_info(
             user_id=user.id,
             username=user.username,
             first_name=user.first_name,
             last_name=user.last_name,
-            phone=phone
+            phone=phone_saved
         )
+
+        # --- история ДО ---
+        history = get_last_messages(
+            user.id,
+            db_path=DB_PATH,
+            limit=CONTEXT_MESSAGE_COUNT
+        )
+
+        # =======================
+        # 🔥 ТЕЛЕФОН
+        # =======================
+
+        phone = None
+
+        if message.contact:
+            phone = message.contact.phone_number
+        elif is_phone(text):
+            phone = text
+
+        if phone:
+            save_client_info(
+                user_id=user.id,
+                username=user.username,
+                first_name=user.first_name,
+                last_name=user.last_name,
+                phone=phone
+            )
+
+            full_history = append_if_not_duplicate(history, text)
+
+            msg = build_lead_message(
+                user,
+                f"📞 Телефон: {phone}",
+                full_history
+            )
+
+            await notify_manager(context, msg)
+            await message.reply_text(CLIENT_LEAD_RESPONSE)
+
+            context.user_data["lead_sent"] = True
+            return
+
+        # =======================
+        # 🔥 СОХРАНЯЕМ СООБЩЕНИЕ
+        # =======================
 
         add_message(user.id, "user", text)
 
-        # --- история ---
         history = get_last_messages(
-            user.id, db_path=DB_PATH, limit=CONTEXT_MESSAGE_COUNT
+            user.id,
+            db_path=DB_PATH,
+            limit=CONTEXT_MESSAGE_COUNT
         )
 
-        system_prompt = context.user_data.get("system_prompt", SYSTEM_PROMPT)
-
-        messages = [
-            {"role": "system", "content": system_prompt},
-            *history,
-            {"role": "user", "content": text}
-        ]
-
-        await update.message.reply_chat_action("typing")
-
-        # 🔥 GPT В ОДНОЙ СТРОКЕ
-        gpt_answer = await generate_gpt_answer(messages)
-
-        if gpt_answer.strip():
-            add_message(user.id, "assistant", gpt_answer)
-
         # =======================
-        # 🔹 Проверки
+        # 🔥 ROUTER
         # =======================
 
-        if is_uncertain_response(gpt_answer):
-            await notify_manager(
-                context,
-                f"⚠️ Неуверенный ответ\n{user.id}\n{text}\n{gpt_answer}"
-            )
+        intent_data = classify_intent(text, history)
+        intent = intent_data.get("intent", "unknown")
 
-        if should_notify_manager(gpt_answer):
-            await notify_manager(
-                context,
-                f"📞 Клиент оставил контакт\n{user.id}\n{text}\n{gpt_answer}"
-            )
+        logger.info(f"[ROUTER] intent={intent} text={text}")
 
-        # --- ответ ---
-        await update.message.reply_text(gpt_answer)
+        # =======================
+        # 🔥 RAG
+        # =======================
+
+        context_data = None
+
+        if intent in ["problem", "info"]:
+            context_data = retrieve_context(text)
+
+        # =======================
+        # 🔥 GPT
+        # =======================
+
+        answer = generate_answer(
+            query=text,
+            history=history,
+            context=context_data
+        )
+
+        # =======================
+        # 🔥 LEAD (ОДИН РАЗ)
+        # =======================
+
+        if intent == "lead" and not context.user_data.get("lead_sent"):
+
+            full_history = append_if_not_duplicate(history, text)
+
+            msg = build_lead_message(user, text, full_history)
+
+            await notify_manager(context, msg)
+            context.user_data["lead_sent"] = True
+
+        # =======================
+        # 🔹 FALLBACK
+        # =======================
+
+        if not answer:
+            answer = "Можете чуть подробнее описать ситуацию 👍"
+
+        add_message(user.id, "assistant", answer)
+        await message.reply_text(answer)
 
     except Exception as e:
         logger.error(f"Ошибка handle_gpt_query: {e}", exc_info=True)
 
         try:
             await update.message.reply_text("🔧 Ошибка обработки запроса")
-        except:
+        except Exception:
             pass
 
 
 # =======================
-# 🔹 Очередь админов
+# 🔹 ОЧЕРЕДЬ
 # =======================
 
 async def process_admin_queue(app: Application):

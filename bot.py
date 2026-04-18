@@ -49,13 +49,10 @@ logger = logging.getLogger(__name__)
 
 # --- Инициализация бота ---
 async def post_init(application):
-    from database import init_admins_table, add_admin, DB_PATH
+    from database import add_admin, DB_PATH
     from config import SUPERADMIN_ID
     import logging
     logger = logging.getLogger(__name__)
-
-    # Инициализация таблицы админов
-    init_admins_table(DB_PATH)
 
     # Гарантируем, что SUPERADMIN всегда в списке
     add_admin(
@@ -68,7 +65,7 @@ async def post_init(application):
     )
 
     logger.info(f"Бот запущен. Главный админ: {SUPERADMIN_ID}")
-    await process_admin_queue(application)  # Проверить очередь при старте
+    await process_admin_queue(application)
 
 
 def setup_handlers(app: Application):
