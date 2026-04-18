@@ -2,6 +2,7 @@
 
 import logging
 import asyncio
+
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -11,14 +12,27 @@ from telegram.ext import (
     filters,
     ContextTypes
 )
-from handlers.admin_management import show_admins_menu
+
+# handlers
 from handlers.start import start, handle_contact
 from handlers.admin import get_admin_handlers, show_admin_panel, show_settings_menu
-from handlers.gpt_chat import handle_gpt_query, process_admin_queue, show_auto_help_submenu, show_auto_help_details
-from handlers.utilities import go_back, handle_help_choice, handle_services, handle_real_location, show_contacts
-from handlers.utilities import show_help_menu
-from config import TELEGRAM_TOKEN, SUPERADMIN_ID
+from handlers.admin_management import show_admins_menu
+from handlers.gpt_chat import handle_gpt_query, process_admin_queue
 
+# utilities (всё, что не GPT)
+from handlers.utilities import (
+    go_back,
+    handle_help_choice,
+    handle_services,
+    handle_real_location,
+    show_contacts,
+    show_help_menu,
+    show_auto_help_submenu,
+    show_auto_help_details
+)
+
+# config
+from config import TELEGRAM_TOKEN, SUPERADMIN_ID
 
 # --- Настройка логирования ---
 logging.basicConfig(
