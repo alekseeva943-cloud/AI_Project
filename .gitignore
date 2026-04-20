@@ -1,4 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+
+# DB
+*.db
+
+# env
 .env
-*.env
-.env.*
-venv/
+
+# venv
+.venv/
+
+# system
+.python-version
