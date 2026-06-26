@@ -19,8 +19,10 @@ logger = logging.getLogger(__name__)
 # 🔹 ENV
 # =======================
 
-env_path = Path(__file__).parent / ".env"
-load_dotenv(dotenv_path=env_path)
+BASE_DIR = Path(__file__).resolve().parent.parent
+env_path = BASE_DIR / ".env"
+
+load_dotenv(env_path)
 
 
 class ConfigError(Exception):

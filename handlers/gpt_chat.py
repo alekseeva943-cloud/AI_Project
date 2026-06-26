@@ -194,6 +194,7 @@ async def handle_gpt_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         intent_data = classify_intent(text, history)
         intent = intent_data.get("intent", "unknown")
+        print("INTENT =", intent)
 
         logger.info(f"[ROUTER] intent={intent} text={text}")
 
@@ -217,19 +218,6 @@ async def handle_gpt_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         # =======================
-        # 🔥 LEAD (ОДИН РАЗ)
-        # =======================
-
-        if intent == "lead" and not context.user_data.get("lead_sent"):
-
-            full_history = append_if_not_duplicate(history, text)
-
-            msg = build_lead_message(user, text, full_history)
-
-            await notify_manager(context, msg)
-            context.user_data["lead_sent"] = True
-
-        # =======================
         # 🔹 FALLBACK
         # =======================
 
@@ -238,6 +226,23 @@ async def handle_gpt_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         add_message(user.id, "assistant", answer)
         await message.reply_text(answer)
+
+        # =======================
+        # 🔥 LEAD
+        # =======================
+
+        if intent == "lead" and not context.user_data.get("lead_sent"):
+
+            full_history = get_last_messages(
+                user.id,
+                db_path=DB_PATH,
+                limit=CONTEXT_MESSAGE_COUNT
+            )
+
+            msg = build_lead_message(user, text, full_history)
+
+            await notify_manager(context, msg)
+            context.user_data["lead_sent"] = True
 
     except Exception as e:
         logger.error(f"Ошибка handle_gpt_query: {e}", exc_info=True)
