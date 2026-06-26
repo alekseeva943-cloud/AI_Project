@@ -72,13 +72,45 @@ async def handle_top_requests_period(update: Update, context: ContextTypes.DEFAU
     await update.message.reply_text(report, reply_markup=get_admin_keyboard())
 
 
+async def handle_stats_period(update: Update, context: ContextTypes.DEFAULT_TYPE, period_text: str):
+
+    period_map = {
+        "📅 Сегодня": 1,
+        "📆 Неделя": 7,
+        "🗓 Месяц": 30,
+        "📈 Год": 365
+    }
+
+    days = period_map.get(period_text)
+
+    from database import get_detailed_stats
+
+    stats = get_detailed_stats(days=days)
+
+    report = (
+        f"📊 <b>Статистика за период: {period_text}</b>\n\n"
+        f"👥 <b>Всего пользователей:</b> {stats['total_users']}\n"
+        f"📱 <b>С телефоном:</b> {stats['with_phone']} ({stats['phone_conversion']}%)\n"
+        f"🚫 <b>Заблокировали бота:</b> {stats['blocked_count']}\n"
+        f"💬 <b>Активные чаты:</b> {stats['active_chats_24h']}\n\n"
+        f"🆕 <b>Новых пользователей:</b> {stats['new_today']}\n"
+        f"📅 <b>Активных пользователей:</b> {stats['active_last_30_days']}"
+    )
+
+    await update.message.reply_text(
+        report,
+        parse_mode="HTML",
+        reply_markup=get_admin_keyboard()
+    )
+
+
 async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_admin(update, context):
         return
 
     text = update.message.text
     if text == "📊 Статистика":
-        await show_stats(update, context)
+        await show_stats_menu(update, context)
     elif text == "📈 Топ запросов":
         await show_top_requests_menu(update, context)
     elif text == "⚙️ Настройки":
@@ -89,8 +121,8 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
         await go_back(update, context)
     elif text == "⬅️ Назад":
         await update.message.reply_text("Возврат в админ-панель", reply_markup=get_admin_keyboard())
-    elif text in ["7 дней", "30 дней", "Полгода", "Год"]:
-        await handle_top_requests_period(update, context, text)
+    elif text in ["📅 Сегодня", "📆 Неделя", "🗓 Месяц", "📈 Год"]:
+        await handle_stats_period(update, context, text)
     else:
         await update.message.reply_text("❓ Неизвестная команда")
 
@@ -259,7 +291,7 @@ async def handle_search_query(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text(client_text, reply_markup=inline_keyboard)
 
     summary = f"✅ Найдено {len(clients)} клиент(а/ов)." if len(clients) <= 10 else \
-              f"✅ Найдено {len(clients)} клиентов (показаны первые 10)."
+        f"✅ Найдено {len(clients)} клиентов (показаны первые 10)."
     await update.message.reply_text(summary, reply_markup=get_admin_keyboard())
     return ConversationHandler.END
 
@@ -476,6 +508,22 @@ async def perform_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def show_top_requests_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [["7 дней", "30 дней"], ["Полгода", "Год"], ["⬅️ Назад"]]
     await update.message.reply_text("📊 Выберите период:", reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
+
+
+async def show_stats_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        ["📅 Сегодня", "📆 Неделя"],
+        ["🗓 Месяц", "📈 Год"],
+        ["⬅️ Назад"]
+    ]
+
+    await update.message.reply_text(
+        "📊 Выберите период статистики:",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard,
+            resize_keyboard=True
+        )
+    )
 
 
 async def show_users_page(update: Update, context: ContextTypes.DEFAULT_TYPE, page: int = 0):
@@ -712,8 +760,26 @@ def get_admin_handlers():
     # Основной обработчик для кнопок админ-панели
     admin_actions_handler = MessageHandler(
         filters.Text([
-            "📊 Статистика", "📈 Топ запросов", "👥 Пользователи",
-            "⬅️ Вернуться", "7 дней", "30 дней", "Полгода", "Год", "⬅️ Назад"
+            # Основное меню админки
+            "📊 Статистика",
+            "📈 Топ запросов",
+            "👥 Пользователи",
+
+            # Периоды статистики
+            "📅 Сегодня",
+            "📆 Неделя",
+            "🗓 Месяц",
+            "📈 Год",
+
+            # Периоды топ-запросов
+            "7 дней",
+            "30 дней",
+            "Полгода",
+            "Год",
+
+            # Навигация
+            "⬅️ Назад",
+            "⬅️ Вернуться"
         ]),
         handle_admin_actions
     )

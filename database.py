@@ -1,6 +1,7 @@
 # database.py
 
 import sqlite3
+from datetime import datetime, timedelta
 from pathlib import Path
 import logging
 from typing import List, Dict
@@ -306,6 +307,111 @@ def get_top_requests(days: int = 7):
     except Exception as e:
         logger.error(f"Ошибка get_top_requests: {e}")
         return []
+    
+
+def get_detailed_stats(days=None):
+    """
+    Возвращает статистику для админки.
+
+    days:
+        None -> общая статистика
+        1    -> сегодня
+        7    -> неделя
+        30   -> месяц
+        365  -> год
+    """
+
+    import sqlite3
+    from datetime import datetime, timedelta
+
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    stats = {}
+
+    # =========================
+    # Всего пользователей
+    # =========================
+    cursor.execute("""
+        SELECT COUNT(*)
+        FROM clients
+    """)
+    stats["total_users"] = cursor.fetchone()[0]
+
+    # =========================
+    # Пользователей с телефоном
+    # =========================
+    cursor.execute("""
+        SELECT COUNT(*)
+        FROM clients
+        WHERE phone IS NOT NULL
+        AND phone != ''
+    """)
+    stats["with_phone"] = cursor.fetchone()[0]
+
+    # Конверсия в телефон
+    if stats["total_users"] > 0:
+        stats["phone_conversion"] = round(
+            stats["with_phone"] / stats["total_users"] * 100,
+            1
+        )
+    else:
+        stats["phone_conversion"] = 0
+
+    # =========================
+    # Заблокировали бота
+    # =========================
+    cursor.execute("""
+        SELECT COUNT(*)
+        FROM clients
+        WHERE is_blocked = 1
+    """)
+    stats["blocked_count"] = cursor.fetchone()[0]
+
+    # =========================
+    # Активные чаты за 24 часа
+    # =========================
+    cursor.execute("""
+        SELECT COUNT(DISTINCT user_id)
+        FROM messages
+        WHERE timestamp >= datetime('now', '-1 day')
+    """)
+    stats["active_chats_24h"] = cursor.fetchone()[0]
+
+    # =========================
+    # Новые пользователи сегодня
+    # =========================
+    cursor.execute("""
+        SELECT COUNT(*)
+        FROM clients
+        WHERE joined_at >= datetime('now', '-1 day')
+    """)
+    stats["new_today"] = cursor.fetchone()[0]
+
+    # =========================
+    # Новые пользователи за неделю
+    # =========================
+    cursor.execute("""
+        SELECT COUNT(*)
+        FROM clients
+        WHERE joined_at >= datetime('now', '-7 day')
+    """)
+    stats["new_last_7_days"] = cursor.fetchone()[0]
+
+    # =========================
+    # Активные за 30 дней
+    # =========================
+    cursor.execute("""
+        SELECT COUNT(DISTINCT user_id)
+        FROM messages
+        WHERE timestamp >= datetime('now', '-30 day')
+    """)
+    stats["active_last_30_days"] = cursor.fetchone()[0]
+
+    conn.close()
+
+    return stats
 
 
 def get_total_clients_count():
