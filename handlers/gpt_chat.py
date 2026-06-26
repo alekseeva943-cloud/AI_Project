@@ -194,8 +194,7 @@ async def handle_gpt_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         intent_data = classify_intent(text, history)
         intent = intent_data.get("intent", "unknown")
-        print("INTENT =", intent)
-
+        
         logger.info(f"[ROUTER] intent={intent} text={text}")
 
         # =======================
