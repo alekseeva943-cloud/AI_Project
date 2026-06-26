@@ -12,6 +12,11 @@ from database import add_message, get_last_messages, DB_PATH
 
 logger = logging.getLogger(__name__)
 
+from prompts.service_prompts import (
+    SERVICES_PROMPTS,
+    AUTO_HELP_PROMPTS
+)
+
 
 # =======================
 # 🔹 КЛАВИАТУРЫ
@@ -130,29 +135,30 @@ async def handle_services(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def show_service_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    service = update.message.text
+    """
+    Показывает описание основной услуги.
+    Тексты берутся из prompts/service_prompts.py
+    """
 
-    descriptions = {
-        "🛞 Шиномонтаж": "Полный комплекс шиномонтажа.",
-        "❄️ Кондиционер": "Обслуживание кондиционеров.",
-        "🚗 Хранение": "Безопасное хранение авто.",
-        "🔧 Авто-помощь": "Помощь на дороге."
-    }
+    service = update.message.text
 
     if service == "⬅️ Вернуться":
         await show_main_menu(update, context)
         return
 
-    text = descriptions.get(service)
+    text = SERVICES_PROMPTS.get(service)
+
     if not text:
+        logger.warning(f"Не найден текст услуги: {service}")
         return
 
     await update.message.reply_text(
         text,
         reply_markup=ReplyKeyboardMarkup(
-            [[KeyboardButton("⬅️ Вернуться")]], resize_keyboard=True)
+            [[KeyboardButton("⬅️ Вернуться")]],
+            resize_keyboard=True
+        )
     )
-
 
 async def show_auto_help_submenu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['previous_state'] = 'services_menu'
@@ -164,27 +170,29 @@ async def show_auto_help_submenu(update: Update, context: ContextTypes.DEFAULT_T
 
 
 async def show_auto_help_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    service = update.message.text
+    """
+    Показывает описание услуги из раздела Авто-помощь.
+    Тексты берутся из prompts/service_prompts.py
+    """
 
-    descriptions = {
-        "⛽ Подвоз топлива": "Доставим топливо.",
-        "💡 Запуск двигателя": "Запустим авто.",
-        "🔒 Отключение сигнализации": "Отключим сигнализацию.",
-        "💻 Компьютерная диагностика": "Сделаем диагностику."
-    }
+    service = update.message.text
 
     if service == "⬅️ Вернуться":
         await handle_services(update, context)
         return
 
-    text = descriptions.get(service)
+    text = AUTO_HELP_PROMPTS.get(service)
+
     if not text:
+        logger.warning(f"Не найден текст услуги автопомощи: {service}")
         return
 
     await update.message.reply_text(
         text,
         reply_markup=ReplyKeyboardMarkup(
-            [[KeyboardButton("⬅️ Вернуться")]], resize_keyboard=True)
+            [[KeyboardButton("⬅️ Вернуться")]],
+            resize_keyboard=True
+        )
     )
 
 
