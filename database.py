@@ -277,9 +277,12 @@ def search_clients(query: str):
             query = f"%{query}%"
 
             cur.execute("""
-                SELECT * FROM clients
-                WHERE username LIKE ? OR first_name LIKE ? OR last_name LIKE ?
-            """, (query, query, query))
+    SELECT * FROM clients
+    WHERE username LIKE ?
+       OR first_name LIKE ?
+       OR last_name LIKE ?
+       OR phone LIKE ?
+""", (query, query, query, query))
 
             return [dict(row) for row in cur.fetchall()]
 
@@ -307,7 +310,7 @@ def get_top_requests(days: int = 7):
     except Exception as e:
         logger.error(f"Ошибка get_top_requests: {e}")
         return []
-    
+
 
 def get_detailed_stats(days=None):
     """
