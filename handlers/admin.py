@@ -117,10 +117,8 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text("🛠 В разработке: Настройки")
     elif text == "👥 Пользователи":
         await show_users_page(update, context, page=0)
-    elif text == "⬅️ Вернуться":
+    elif text in ["⬅️ Вернуться", "⬅️ Назад", "⬅️ Отмена"]:
         await go_back(update, context)
-    elif text == "⬅️ Назад":
-        await update.message.reply_text("Возврат в админ-панель", reply_markup=get_admin_keyboard())
     elif text in ["📅 Сегодня", "📆 Неделя", "🗓 Месяц", "📈 Год"]:
         await handle_stats_period(update, context, text)
     else:
@@ -274,6 +272,19 @@ async def start_client_search(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
     return AWAITING_SEARCH_QUERY
 
+
+
+
+async def cancel_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "Поиск отменён.",
+        reply_markup=get_admin_keyboard()
+    )
+    return ConversationHandler.END
+
+
+async def cancel_admin_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    return ConversationHandler.END
 
 async def handle_search_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
@@ -694,7 +705,7 @@ def get_admin_handlers():
         states={
             AWAITING_SEARCH_QUERY: [
                 MessageHandler(filters.Text("⬅️ Отмена"),
-                               lambda u, c: ConversationHandler.END),
+                               cancel_search),
                 MessageHandler(filters.TEXT & ~filters.COMMAND,
                                handle_search_query),
             ]
@@ -742,7 +753,7 @@ def get_admin_handlers():
             1: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_input)]
         },
         fallbacks=[MessageHandler(
-            filters.ALL, lambda u, c: ConversationHandler.END)],
+            filters.ALL, cancel_admin_conversation)],
         allow_reentry=True
     )
 
@@ -753,7 +764,7 @@ def get_admin_handlers():
             1: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_input)]
         },
         fallbacks=[MessageHandler(
-            filters.ALL, lambda u, c: ConversationHandler.END)],
+            filters.ALL, cancel_admin_conversation)],
         allow_reentry=True
     )
 
@@ -779,7 +790,8 @@ def get_admin_handlers():
 
             # Навигация
             "⬅️ Назад",
-            "⬅️ Вернуться"
+            "⬅️ Вернуться",
+            "⬅️ Отмена"
         ]),
         handle_admin_actions
     )
