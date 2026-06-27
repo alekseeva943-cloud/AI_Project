@@ -24,6 +24,7 @@ from config import is_admin, get_main_keyboard
 from config.config import CONTEXT_MESSAGE_COUNT
 
 from database import add_message, get_last_messages, DB_PATH
+from config import buttons as btn
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +118,7 @@ async def show_service_details(update: Update, context: ContextTypes.DEFAULT_TYP
 
     service = update.message.text
 
-    if service == "⬅️ Вернуться":
+    if service == btn.BTN_BACK:
         await show_main_menu(update, context)
         return
 
@@ -153,7 +154,7 @@ async def show_auto_help_details(update: Update, context: ContextTypes.DEFAULT_T
 
     service = update.message.text
 
-    if service == "⬅️ Вернуться":
+    if service == btn.BTN_BACK:
         await handle_services(update, context)
         return
 
@@ -238,7 +239,7 @@ def get_utility_handlers():
         CommandHandler("id", show_id),
         MessageHandler(filters.LOCATION, handle_real_location),
         MessageHandler(filters.CONTACT, handle_contact),
-        MessageHandler(filters.Text("🛠 Наши услуги"), handle_services),
+        MessageHandler(filters.Text(btn.BTN_SERVICES), handle_services),
     ]
 
 

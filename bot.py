@@ -34,6 +34,7 @@ from handlers.utilities import (
 
 # config
 from config import TELEGRAM_TOKEN, SUPERADMIN_ID
+from config import buttons as btn
 
 # --- Настройка логирования ---
 logging.basicConfig(
@@ -95,7 +96,7 @@ def setup_handlers(app: Application):
 
     app.add_handler(
         MessageHandler(
-            filters.Text("⬅️ Вернуться"),
+            filters.Text(btn.BTN_BACK),
             go_back
         )
     )

@@ -37,6 +37,8 @@ from database import get_last_n_messages, get_total_users, get_client_info, sear
 from handlers.utilities import go_back
 from handlers.admin_management import add_admin_start, handle_admin_input, remove_admin_start, show_admins_menu
 
+from config import buttons as btn
+
 logger = logging.getLogger(__name__)
 
 # Состояния
@@ -78,7 +80,7 @@ async def show_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Формирует статистику популярных запросов за выбранный период.
 async def handle_top_requests_period(update: Update, context: ContextTypes.DEFAULT_TYPE, period_text: str):
-    period_map = {"7 дней": 7, "30 дней": 30, "Полгода": 180, "Год": 365}
+    period_map = {btn.BTN_PERIOD_7_DAYS: 7, btn.BTN_PERIOD_30_DAYS: 30, btn.BTN_PERIOD_HALF_YEAR: 180, btn.BTN_PERIOD_YEAR: 365}
     days = period_map.get(period_text, 7)
     top_requests = get_top_requests(days=days)
 
@@ -103,10 +105,10 @@ async def handle_top_requests_period(update: Update, context: ContextTypes.DEFAU
 async def handle_stats_period(update: Update, context: ContextTypes.DEFAULT_TYPE, period_text: str):
 
     period_map = {
-        "📅 Сегодня": 1,
-        "📆 Неделя": 7,
-        "🗓 Месяц": 30,
-        "📈 Год": 365
+        btn.BTN_TODAY: 1,
+        btn.BTN_WEEK: 7,
+        btn.BTN_MONTH: 30,
+        btn.BTN_STATS_YEAR: 365
     }
 
     days = period_map.get(period_text)
@@ -138,17 +140,17 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
         return
 
     text = update.message.text
-    if text == "📊 Статистика":
+    if text == btn.BTN_STATS:
         await show_stats_menu(update, context)
-    elif text == "📈 Топ запросов":
+    elif text == btn.BTN_TOP_REQUESTS:
         await show_top_requests_menu(update, context)
-    elif text == "⚙️ Настройки":
+    elif text == btn.BTN_SETTINGS:
         await update.message.reply_text("🛠 В разработке: Настройки")
-    elif text == "👥 Пользователи":
+    elif text == btn.BTN_USERS:
         await show_users_page(update, context, page=0)
-    elif text in ["⬅️ Вернуться", "⬅️ Назад", "❌ Отмена"]:
+    elif text in [btn.BTN_BACK, btn.BTN_PREVIOUS, btn.BTN_CANCEL]:
         await go_back(update, context)
-    elif text in ["📅 Сегодня", "📆 Неделя", "🗓 Месяц", "📈 Год"]:
+    elif text in [btn.BTN_TODAY, btn.BTN_WEEK, btn.BTN_MONTH, btn.BTN_STATS_YEAR]:
         await handle_stats_period(update, context, text)
     else:
         await update.message.reply_text("❓ Неизвестная команда")
@@ -210,7 +212,7 @@ async def start_write_to_client(update: Update, context: ContextTypes.DEFAULT_TY
 
 # Отправляет введённое администратором сообщение клиенту.
 async def send_message_to_client(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.text.strip() == "❌ Отмена":
+    if update.message.text.strip() == btn.BTN_CANCEL:
         context.user_data.pop('writing_to', None)
         await update.message.reply_text("Отменено.", reply_markup=get_admin_keyboard())
         return ConversationHandler.END
@@ -325,7 +327,7 @@ async def cancel_admin_conversation(update: Update, context: ContextTypes.DEFAUL
 
 async def handle_search_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
-    if text == "❌ Отмена":
+    if text == btn.BTN_CANCEL:
         await update.message.reply_text("Поиск отменён.", reply_markup=get_admin_keyboard())
         return ConversationHandler.END
 
@@ -365,7 +367,7 @@ async def show_chat_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.message.reply_text(history, reply_markup=get_admin_keyboard())
 
 
-BROADCAST_TYPES = {"Всем клиентам": "all", "Только с телефоном": "with_phone"}
+BROADCAST_TYPES = {btn.BTN_BROADCAST_ALL: "all", btn.BTN_BROADCAST_PHONE: "with_phone"}
 
 
 # Приводит телефон к удобному для отображения формату.
@@ -443,7 +445,7 @@ async def start_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Обрабатывает выбор типа рассылки.
 async def handle_broadcast_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
-    if text == "❌ Отмена":
+    if text == btn.BTN_CANCEL:
         await update.message.reply_text("Рассылка отменена.", reply_markup=get_admin_keyboard())
         return ConversationHandler.END
     if text not in BROADCAST_TYPES:
@@ -458,7 +460,7 @@ async def handle_broadcast_type(update: Update, context: ContextTypes.DEFAULT_TY
 # Сохраняет текст рассылки и готовит подтверждение отправки.
 async def handle_broadcast_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
-    if text == "❌ Отмена":
+    if text == btn.BTN_CANCEL:
         await update.message.reply_text("Рассылка отменена.", reply_markup=get_admin_keyboard())
         return ConversationHandler.END
     if len(text) > 4096:
@@ -481,7 +483,7 @@ async def handle_broadcast_text(update: Update, context: ContextTypes.DEFAULT_TY
 # Выполняет массовую рассылку пользователям.
 async def perform_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Выполнение рассылки"""
-    if update.message.text.strip() != "✅ Отправить":
+    if update.message.text.strip() != btn.BTN_SEND:
         await update.message.reply_text("Рассылка отменена.", reply_markup=get_admin_keyboard())
         return ConversationHandler.END
 
@@ -607,7 +609,7 @@ async def show_users_page(update: Update, context: ContextTypes.DEFAULT_TYPE, pa
     nav_buttons = []
     if page > 0:
         nav_buttons.append(InlineKeyboardButton(
-            "⬅️ Назад", callback_data=f"users_page_{page - 1}"))
+            btn.BTN_PREVIOUS, callback_data=f"users_page_{page - 1}"))
     if len(clients) == PAGE_SIZE and (page + 1) * PAGE_SIZE < total:
         nav_buttons.append(InlineKeyboardButton(
             "Далее ➡️", callback_data=f"users_page_{page + 1}"))
@@ -678,7 +680,7 @@ async def show_chat_page(update: Update, context: ContextTypes.DEFAULT_TYPE, pag
     if not messages:
         text = "📭 Нет сообщений."
         keyboard = InlineKeyboardMarkup(
-            [[InlineKeyboardButton("⬅️ Назад", callback_data="back_to_users")]])
+            [[InlineKeyboardButton(btn.BTN_PREVIOUS, callback_data="back_to_users")]])
         await query.edit_message_text(text, reply_markup=keyboard)
         return
 
@@ -711,7 +713,7 @@ async def show_chat_page(update: Update, context: ContextTypes.DEFAULT_TYPE, pag
     nav_buttons = []
     if page > 0:
         nav_buttons.append(InlineKeyboardButton(
-            "⬅️ Назад", callback_data=f"chat_page_{page - 1}"))
+            btn.BTN_PREVIOUS, callback_data=f"chat_page_{page - 1}"))
     if len(messages) == PAGE_SIZE and (page + 1) * PAGE_SIZE < total_msgs:
         nav_buttons.append(InlineKeyboardButton(
             "Далее ➡️", callback_data=f"chat_page_{page + 1}"))
@@ -748,10 +750,10 @@ async def handle_chat_navigation(update: Update, context: ContextTypes.DEFAULT_T
 def get_admin_handlers():
     search_conversation = ConversationHandler(
         entry_points=[MessageHandler(filters.Text(
-            "🔍 Поиск клиентов"), start_client_search)],
+            btn.BTN_CLIENT_SEARCH), start_client_search)],
         states={
             AWAITING_SEARCH_QUERY: [
-                MessageHandler(filters.Text("❌ Отмена"),
+                MessageHandler(filters.Text(btn.BTN_CANCEL),
                                cancel_search),
                 MessageHandler(filters.TEXT & ~filters.COMMAND,
                                handle_search_query),
@@ -763,7 +765,7 @@ def get_admin_handlers():
 
     broadcast_conversation = ConversationHandler(
         entry_points=[MessageHandler(
-            filters.Text("📢 Рассылка"), start_broadcast)],
+            filters.Text(btn.BTN_BROADCAST), start_broadcast)],
         states={
             AWAITING_BROADCAST_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_broadcast_type)],
             AWAITING_BROADCAST_TEXT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_broadcast_text)],
@@ -779,7 +781,7 @@ def get_admin_handlers():
             start_write_to_client, pattern=r"^write_\d+$")],
         states={
             AWAITING_MESSAGE_TO_CLIENT: [
-                MessageHandler(filters.Text("❌ Отмена"),
+                MessageHandler(filters.Text(btn.BTN_CANCEL),
                                cancel_write_to_client),
                 MessageHandler(filters.TEXT & ~filters.COMMAND,
                                send_message_to_client)
@@ -795,7 +797,7 @@ def get_admin_handlers():
     # Управление админами — тоже через ConversationHandler
     admin_add_conversation = ConversationHandler(
         entry_points=[MessageHandler(filters.Text(
-            "➕ Добавить админа"), add_admin_start)],
+            btn.BTN_ADD_ADMIN), add_admin_start)],
         states={
             1: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_input)]
         },
@@ -806,7 +808,7 @@ def get_admin_handlers():
 
     admin_remove_conversation = ConversationHandler(
         entry_points=[MessageHandler(filters.Text(
-            "🗑 Удалить админа"), remove_admin_start)],
+            btn.BTN_REMOVE_ADMIN), remove_admin_start)],
         states={
             1: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_input)]
         },
@@ -819,26 +821,26 @@ def get_admin_handlers():
     admin_actions_handler = MessageHandler(
         filters.Text([
             # Основное меню админки
-            "📊 Статистика",
-            "📈 Топ запросов",
-            "👥 Пользователи",
+            btn.BTN_STATS,
+            btn.BTN_TOP_REQUESTS,
+            btn.BTN_USERS,
 
             # Периоды статистики
-            "📅 Сегодня",
-            "📆 Неделя",
-            "🗓 Месяц",
-            "📈 Год",
+            btn.BTN_TODAY,
+            btn.BTN_WEEK,
+            btn.BTN_MONTH,
+            btn.BTN_STATS_YEAR,
 
             # Периоды топ-запросов
-            "7 дней",
-            "30 дней",
-            "Полгода",
-            "Год",
+            btn.BTN_PERIOD_7_DAYS,
+            btn.BTN_PERIOD_30_DAYS,
+            btn.BTN_PERIOD_HALF_YEAR,
+            btn.BTN_PERIOD_YEAR,
 
             # Навигация
-            "⬅️ Назад",
-            "⬅️ Вернуться",
-            "❌ Отмена"
+            btn.BTN_PREVIOUS,
+            btn.BTN_BACK,
+            btn.BTN_CANCEL
         ]),
         handle_admin_actions
     )
@@ -862,8 +864,8 @@ def get_admin_handlers():
         admin_add_conversation,
         admin_remove_conversation,
         admin_actions_handler,
-        MessageHandler(filters.Text("⚙️ Настройки"), show_settings_menu),
-        MessageHandler(filters.Text("👥 Админы"),
+        MessageHandler(filters.Text(btn.BTN_SETTINGS), show_settings_menu),
+        MessageHandler(filters.Text(btn.BTN_ADMINS),
                        show_admins_menu),  # ← добавлено
         *callback_handlers,
     ]
