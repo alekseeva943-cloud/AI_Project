@@ -768,6 +768,36 @@ async def handle_chat_navigation(update: Update, context: ContextTypes.DEFAULT_T
         await query.message.reply_text("Неизвестное действие.")
 
 
+async def handle_change_site(update, context):
+    await update.message.reply_text(
+        "🚧 Изменение сайта пока находится в разработке."
+    )
+
+
+async def handle_check_changes(update, context):
+    await update.message.reply_text(
+        "🚧 Проверка изменений пока находится в разработке."
+    )
+
+
+async def handle_build_new_base(update, context):
+    await update.message.reply_text(
+        "🚧 Сборка новой базы пока находится в разработке."
+    )
+
+
+async def handle_activate_new_base(update, context):
+    await update.message.reply_text(
+        "🚧 Активация новой базы пока находится в разработке."
+    )
+
+
+async def handle_knowledge_status(update, context):
+    await update.message.reply_text(
+        "🚧 Статус базы пока находится в разработке."
+    )
+
+
 # Регистрирует и возвращает все обработчики административного раздела.
 def get_admin_handlers():
     search_conversation = ConversationHandler(
@@ -892,6 +922,30 @@ def get_admin_handlers():
         MessageHandler(
             filters.Text(btn.BTN_KNOWLEDGE_BASE),
             show_knowledge_base_menu
+        ),
+        MessageHandler(
+            filters.Text(btn.BTN_CHANGE_SITE),
+            handle_change_site
+        ),
+
+        MessageHandler(
+            filters.Text(btn.BTN_CHECK_CHANGES),
+            handle_check_changes
+        ),
+
+        MessageHandler(
+            filters.Text(btn.BTN_BUILD_NEW_BASE),
+            handle_build_new_base
+        ),
+
+        MessageHandler(
+            filters.Text(btn.BTN_ACTIVATE_NEW_BASE),
+            handle_activate_new_base
+        ),
+
+        MessageHandler(
+            filters.Text(btn.BTN_KNOWLEDGE_STATUS),
+            handle_knowledge_status
         ),
         
         *callback_handlers,
