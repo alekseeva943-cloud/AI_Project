@@ -26,6 +26,7 @@ from config.admin_keyboards import (
     get_broadcast_type_keyboard,
     get_stats_keyboard,
     get_top_requests_keyboard,
+    get_knowledge_base_keyboard,
     get_broadcast_confirm_keyboard
 )
 from database import add_message, get_all_active_user_ids, get_users_with_phone, mark_user_blocked
@@ -67,6 +68,15 @@ async def show_settings_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await update.message.reply_text("⚙️ Настройки:", reply_markup=get_settings_keyboard())
 
 
+# Показывает меню управления базой знаний.
+async def show_knowledge_base_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["previous_state"] = "knowledge_base_menu"
+
+    await update.message.reply_text(
+        btn.BTN_KNOWLEDGE_BASE,
+        reply_markup=get_knowledge_base_keyboard()
+    )
+
 # Показывает главное меню административной панели.
 async def show_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показывает админ-панель и запоминает предыдущее состояние"""
@@ -90,8 +100,8 @@ async def handle_top_requests_period(update: Update, context: ContextTypes.DEFAU
     top_requests = get_top_requests(days=days)
 
     logger.info(
-    f"[TOP REQUESTS RESULT] {top_requests}"
-)
+        f"[TOP REQUESTS RESULT] {top_requests}"
+    )
 
     if not top_requests:
         await update.message.reply_text(f"📭 Нет данных за {period_text}.", reply_markup=get_admin_keyboard())
@@ -151,13 +161,14 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
     text = update.message.text
 
     if text == btn.BTN_STATS:
-      await show_top_requests_menu(update, context)
+        await show_top_requests_menu(update, context)
 
     elif text == btn.BTN_TOP_REQUESTS:
         await show_stats_menu(update, context)
 
     elif text == btn.BTN_SETTINGS:
-        await update.message.reply_text("🛠 В разработке: Настройки")
+        logger.warning("СРАБОТАЛ HANDLE_ADMIN_ACTIONS SETTINGS")
+        await update.message.reply_text("TEST SETTINGS")
 
     elif text == btn.BTN_USERS:
         await show_users_page(update, context, page=0)
@@ -877,6 +888,11 @@ def get_admin_handlers():
         admin_actions_handler,
         MessageHandler(filters.Text(btn.BTN_SETTINGS), show_settings_menu),
         MessageHandler(filters.Text(btn.BTN_ADMINS),
-                       show_admins_menu),  # ← добавлено
+                       show_admins_menu),
+        MessageHandler(
+            filters.Text(btn.BTN_KNOWLEDGE_BASE),
+            show_knowledge_base_menu
+        ),
+        
         *callback_handlers,
     ]

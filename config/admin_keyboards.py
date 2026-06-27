@@ -46,8 +46,15 @@ from config.buttons import (
     BTN_TODAY,
     BTN_WEEK,
     BTN_MONTH,
-    BTN_STATS_YEAR
-)
+    BTN_STATS_YEAR,
+
+    BTN_KNOWLEDGE_BASE,
+    BTN_CHANGE_SITE,
+    BTN_CHECK_CHANGES,
+    BTN_BUILD_NEW_BASE,
+    BTN_ACTIVATE_NEW_BASE,
+    BTN_KNOWLEDGE_STATUS
+    )
 
 # ==========================================================
 # Главное меню администратора.
@@ -74,6 +81,7 @@ def get_settings_keyboard():
     return ReplyKeyboardMarkup(
         keyboard=[
             [BTN_ADMINS],
+            [BTN_KNOWLEDGE_BASE],
             [BTN_PREVIOUS]
         ],
         resize_keyboard=True
@@ -147,6 +155,29 @@ def get_broadcast_confirm_keyboard():
     return ReplyKeyboardMarkup(
         keyboard=[
             [BTN_SEND, BTN_CANCEL]
+        ],
+        resize_keyboard=True
+    )
+
+# ==========================================================
+# КЛАВИАТУРА УПРАВЛЕНИЯ БАЗОЙ ЗНАНИЙ
+#
+# Используется:
+# - handlers/admin.py
+# - handlers/settings.py
+#
+# Позволяет полностью управлять RAG через Telegram.
+# ==========================================================
+
+def get_knowledge_base_keyboard():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [BTN_CHANGE_SITE],
+            [BTN_CHECK_CHANGES],
+            [BTN_BUILD_NEW_BASE],
+            [BTN_ACTIVATE_NEW_BASE],
+            [BTN_KNOWLEDGE_STATUS],
+            [BTN_PREVIOUS]
         ],
         resize_keyboard=True
     )
