@@ -223,7 +223,7 @@ async def handle_gpt_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Формируем красивую карточку заявки.
             msg = build_lead_message(
                 user,
-                f"📍 Геолокация клиента: {lat}, {lon}",
+                f"📍 Клиент отправил геолокацию",
                 full_history
             )
 

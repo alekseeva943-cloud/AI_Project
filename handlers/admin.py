@@ -80,9 +80,18 @@ async def show_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Формирует статистику популярных запросов за выбранный период.
 async def handle_top_requests_period(update: Update, context: ContextTypes.DEFAULT_TYPE, period_text: str):
-    period_map = {btn.BTN_PERIOD_7_DAYS: 7, btn.BTN_PERIOD_30_DAYS: 30, btn.BTN_PERIOD_HALF_YEAR: 180, btn.BTN_PERIOD_YEAR: 365}
+    period_map = {btn.BTN_PERIOD_7_DAYS: 7, btn.BTN_PERIOD_30_DAYS: 30,
+                  btn.BTN_PERIOD_HALF_YEAR: 180, btn.BTN_PERIOD_YEAR: 365}
     days = period_map.get(period_text, 7)
+
+    logger.info(
+        f"[TOP REQUESTS] period={period_text}, days={days}"
+    )
     top_requests = get_top_requests(days=days)
+
+    logger.info(
+    f"[TOP REQUESTS RESULT] {top_requests}"
+)
 
     if not top_requests:
         await update.message.reply_text(f"📭 Нет данных за {period_text}.", reply_markup=get_admin_keyboard())
@@ -140,18 +149,40 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
         return
 
     text = update.message.text
+
     if text == btn.BTN_STATS:
-        await show_stats_menu(update, context)
+      await show_top_requests_menu(update, context)
+
     elif text == btn.BTN_TOP_REQUESTS:
-        await show_top_requests_menu(update, context)
+        await show_stats_menu(update, context)
+
     elif text == btn.BTN_SETTINGS:
         await update.message.reply_text("🛠 В разработке: Настройки")
+
     elif text == btn.BTN_USERS:
         await show_users_page(update, context, page=0)
+
     elif text in [btn.BTN_BACK, btn.BTN_PREVIOUS, btn.BTN_CANCEL]:
         await go_back(update, context)
-    elif text in [btn.BTN_TODAY, btn.BTN_WEEK, btn.BTN_MONTH, btn.BTN_STATS_YEAR]:
+
+    # Периоды статистики.
+    elif text in [
+        btn.BTN_TODAY,
+        btn.BTN_WEEK,
+        btn.BTN_MONTH,
+        btn.BTN_STATS_YEAR
+    ]:
         await handle_stats_period(update, context, text)
+
+    # Периоды топ-запросов.
+    elif text in [
+        btn.BTN_PERIOD_7_DAYS,
+        btn.BTN_PERIOD_30_DAYS,
+        btn.BTN_PERIOD_HALF_YEAR,
+        btn.BTN_PERIOD_YEAR
+    ]:
+        await handle_top_requests_period(update, context, text)
+
     else:
         await update.message.reply_text("❓ Неизвестная команда")
 
@@ -346,7 +377,8 @@ async def handle_search_query(update: Update, context: ContextTypes.DEFAULT_TYPE
     return ConversationHandler.END
 
 
-BROADCAST_TYPES = {btn.BTN_BROADCAST_ALL: "all", btn.BTN_BROADCAST_PHONE: "with_phone"}
+BROADCAST_TYPES = {btn.BTN_BROADCAST_ALL: "all",
+                   btn.BTN_BROADCAST_PHONE: "with_phone"}
 
 
 # Приводит телефон к удобному для отображения формату.
@@ -543,19 +575,19 @@ async def perform_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
-# Показывает меню выбора периода топа запросов.
+# Показывает меню выбора периода для топа запросов.
 async def show_top_requests_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "📊 Выберите период:",
-        reply_markup=get_stats_keyboard()
+        "📊 Выберите период для анализа популярных запросов:",
+        reply_markup=get_top_requests_keyboard()
     )
 
 
-# Показывает меню выбора периода статистики.
+# Показывает меню выбора периода статистики проекта.
 async def show_stats_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "📊 Выберите период статистики:",
-        reply_markup=get_top_requests_keyboard()
+        "📈 Выберите период статистики:",
+        reply_markup=get_stats_keyboard()
     )
 
 

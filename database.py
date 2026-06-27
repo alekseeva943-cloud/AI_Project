@@ -5,6 +5,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 import logging
 from typing import List, Dict
+from config import buttons as btn
+
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +17,19 @@ logger = logging.getLogger(__name__)
 DB_PATH = Path(__file__).parent / "data" / "dialogs.db"
 DB_PATH.parent.mkdir(exist_ok=True)
 
+# Кнопки, которые считаются обращениями клиентов
+# и участвуют в статистике топ-запросов.
+HELP_REQUEST_BUTTONS = [
+    btn.BTN_FLAT_TIRE,
+    btn.BTN_NO_FUEL,
+    btn.BTN_NOT_STARTING,
+    btn.BTN_WARM_UP,
+    btn.BTN_CONDITIONER_PROBLEM,
+    btn.BTN_ELECTRIC_PROBLEM,
+    btn.BTN_UNLOCK_CAR,
+    btn.BTN_DIAGNOSTIC_REQUEST,
+    btn.BTN_OTHER_PROBLEM,
+]
 
 # =======================
 # 🔹 INIT
@@ -291,26 +306,47 @@ def search_clients(query: str):
         return []
 
 
+# Возвращает самые популярные обращения из раздела
+# "Нужна помощь" за выбранный период.
 def get_top_requests(days: int = 7):
     try:
         with sqlite3.connect(DB_PATH) as conn:
             cur = conn.cursor()
 
-            cur.execute("""
+            # Создаём строку вида:
+            # ?, ?, ?, ?, ?, ?, ?, ?, ?
+            placeholders = ",".join(
+                ["?"] * len(HELP_REQUEST_BUTTONS)
+            )
+
+            query = f"""
                 SELECT content, COUNT(*) as count
                 FROM messages
-                WHERE role='user'
+                WHERE
+                    role = 'user'
+                    AND content IN ({placeholders})
+                    AND timestamp >= datetime('now', ?)
                 GROUP BY content
                 ORDER BY count DESC
                 LIMIT 10
-            """)
+            """
+
+            # Передаём:
+            # сначала список кнопок,
+            # затем период вида "-30 days"
+            params = HELP_REQUEST_BUTTONS + [
+                f"-{days} days"
+            ]
+
+            cur.execute(query, params)
 
             return cur.fetchall()
 
     except Exception as e:
-        logger.error(f"Ошибка get_top_requests: {e}")
+        logger.error(
+            f"Ошибка get_top_requests: {e}"
+        )
         return []
-
 
 def get_detailed_stats(days=None):
     """
