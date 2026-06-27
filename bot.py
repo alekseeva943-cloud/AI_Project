@@ -14,10 +14,11 @@ from telegram.ext import (
 )
 
 # handlers
-from handlers.start import start, handle_contact
+from handlers.start import start
 from handlers.admin import get_admin_handlers, show_admin_panel, show_settings_menu
 from handlers.admin_management import show_admins_menu
 from handlers.gpt_chat import handle_gpt_query, process_admin_queue
+from handlers.utilities import handle_contact
 
 # utilities (всё, что не GPT)
 from handlers.utilities import (

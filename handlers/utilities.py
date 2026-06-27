@@ -23,7 +23,7 @@ from config.keyboards import (
 from config import is_admin, get_main_keyboard
 from config.config import CONTEXT_MESSAGE_COUNT
 
-from database import add_message, get_last_messages, DB_PATH
+from database import add_message, get_all_admins, get_last_messages, DB_PATH, save_client_info
 from config import buttons as btn
 
 logger = logging.getLogger(__name__)
@@ -181,28 +181,68 @@ async def show_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"Ваш ID: {user_id}")
 
 
-
 # Обрабатывает отправленный пользователем номер телефона.
 async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    phone = update.message.contact.phone_number
+    """Обработка и пересылка контакта + контекст"""
+    try:
+        contact = update.message.contact
+        user = update.effective_user
 
-    from database import save_client_info
+        # 1. Подтверждение пользователю
+        await update.message.reply_text(
+            "✅ Контакт принят!\n\n"
+            "Мастер сейчас свяжется с Вами.",
+            reply_markup=get_main_keyboard(
+                is_admin_user=is_admin(user.id)
+            )
+        )
 
-    save_client_info(
-        user_id=user.id,
-        username=user.username,
-        first_name=user.first_name,
-        last_name=user.last_name,
-        phone=phone
-    )
+        # 2. Сохраняем клиента с номером телефона
+        save_client_info(
+            user_id=user.id,
+            username=user.username,
+            first_name=user.first_name,
+            last_name=user.last_name,
+            phone=contact.phone_number  # Теперь передаём телефон
+        )
 
-    add_message(user.id, "user", "[CONTACT]")
+        # 3. Получаем последние N сообщений
+        last_messages = get_last_messages(
+            user.id, db_path=DB_PATH, limit=CONTEXT_MESSAGE_COUNT)
 
-    await update.message.reply_text(
-        "Спасибо! Мы свяжемся с вами.",
-        reply_markup=get_main_keyboard()
-    )
+        # 4. Формируем текст для менеджера
+        chat_link = f"tg://user?id={user.id}"
+        context_text = "\n".join(
+            [f"{msg['role']}: {msg['content']}" for msg in last_messages])
+
+        manager_msg = (
+            f"📞 Новый контакт:\n"
+            f"• Имя: {contact.first_name}\n"
+            f"• Телефон: {contact.phone_number}\n"
+            f"• Чат: {chat_link}\n"
+            f"• ID пользователя: {user.id}\n\n"
+            f"📄 Последний контекст ({len(last_messages)} сообщений):\n"
+            f"{context_text if context_text else 'Нет истории'}"
+        )
+
+        # 5. Пересылаем всем админам
+        admins = get_all_admins(DB_PATH)
+        for admin in admins:
+            admin_id = admin['user_id']
+            try:
+                await context.bot.send_contact(
+                    chat_id=admin_id,
+                    phone_number=contact.phone_number,
+                    first_name=contact.first_name,
+                    last_name=contact.last_name
+                )
+                await context.bot.send_message(chat_id=admin_id, text=manager_msg)
+            except Exception as ex:
+                logger.warning(
+                    f"Не удалось отправить контакт админу {admin_id}: {ex}")
+    except Exception as e:
+        logger.error(f"Ошибка обработки контакта: {e}", exc_info=True)
+        await update.message.reply_text("⚠️ Ошибка обработки контакта")
 
 
 # =======================
