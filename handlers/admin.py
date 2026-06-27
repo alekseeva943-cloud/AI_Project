@@ -346,27 +346,6 @@ async def handle_search_query(update: Update, context: ContextTypes.DEFAULT_TYPE
     return ConversationHandler.END
 
 
-# Открывает историю переписки выбранного клиента.
-async def show_chat_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    user_id = int(query.data.split("_")[1])
-    messages = get_last_n_messages(user_id, n=20)
-
-    if not messages:
-        await query.edit_message_text("📭 Нет сообщений.")
-        return
-
-    history = f"💬 Переписка с клиентом {user_id}:\n\n"
-    for msg in messages:
-        role = "👤 Клиент" if msg['role'] == 'user' else "🤖 Бот"
-        content = (msg['content'][:200] +
-                   '...') if len(msg['content']) > 200 else msg['content']
-        history += f"{role} ({msg['timestamp'][:16]}):\n{content}\n\n"
-
-    await query.message.reply_text(history, reply_markup=get_admin_keyboard())
-
-
 BROADCAST_TYPES = {btn.BTN_BROADCAST_ALL: "all", btn.BTN_BROADCAST_PHONE: "with_phone"}
 
 

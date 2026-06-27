@@ -24,7 +24,6 @@ from handlers.utilities import (
     go_back,
     handle_help_choice,
     handle_services,
-    handle_real_location,
     show_contacts,
     show_help_menu,
     show_auto_help_submenu,
@@ -110,12 +109,6 @@ def setup_handlers(app: Application):
         )
     )
 
-    app.add_handler(
-        MessageHandler(
-            filters.LOCATION,
-            handle_real_location
-        )
-    )
 
     # =====================================================
     # 2. КНОПКИ ВЕРХНЕГО УРОВНЯ
@@ -224,9 +217,15 @@ def setup_handlers(app: Application):
     # 8. ВСЕ ОСТАЛЬНЫЕ ТЕКСТЫ → GPT
     # =====================================================
 
+    # Обрабатываем все текстовые сообщения,
+    # контакты и геолокации через единый GPT-роутер.
     app.add_handler(
         MessageHandler(
-            filters.TEXT & ~filters.COMMAND,
+            (
+                filters.TEXT |
+                filters.CONTACT |
+                filters.LOCATION
+            ) & ~filters.COMMAND,
             handle_gpt_query
         )
     )

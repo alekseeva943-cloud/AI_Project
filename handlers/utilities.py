@@ -181,30 +181,6 @@ async def show_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"Ваш ID: {user_id}")
 
 
-# Обрабатывает отправленную пользователем геолокацию.
-async def handle_real_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    location = update.message.location
-
-    if not location:
-        return
-
-    lat, lon = location.latitude, location.longitude
-
-    add_message(user.id, "user", f"LOCATION {lat},{lon}")
-
-    from handlers.gpt_chat import notify_manager
-
-    await notify_manager(
-        context,
-        f"📍 {user.id} отправил локацию: {lat},{lon}"
-    )
-
-    await update.message.reply_text(
-        "Геолокация получена",
-        reply_markup=get_main_keyboard()
-    )
-
 
 # Обрабатывает отправленный пользователем номер телефона.
 async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -237,7 +213,6 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def get_utility_handlers():
     return [
         CommandHandler("id", show_id),
-        MessageHandler(filters.LOCATION, handle_real_location),
         MessageHandler(filters.CONTACT, handle_contact),
         MessageHandler(filters.Text(btn.BTN_SERVICES), handle_services),
     ]

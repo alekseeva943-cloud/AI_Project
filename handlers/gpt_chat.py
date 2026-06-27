@@ -82,9 +82,31 @@ async def notify_manager(context: ContextTypes.DEFAULT_TYPE, message: str):
 # 🔹 СБОРКА ЗАЯВКИ
 # =======================
 
+# Формирует красивую карточку заявки для менеджера.
+# Используется для:
+# - заявок по телефону;
+# - лидов от GPT;
+# - геолокации;
+# - любых будущих типов обращений.
 def build_lead_message(user, text: str, history: list) -> str:
+
+    # Формируем отображаемый username
     username = f"@{user.username}" if user.username else "без username"
+
+    # Получаем последние сообщения клиента
     context_text = format_history(history)
+
+    # Получаем информацию о клиенте из базы,
+    # чтобы сразу показать менеджеру телефон.
+    client_info = get_client_info(user.id)
+
+    # Если телефон есть — показываем его,
+    # иначе выводим "не указан".
+    phone = (
+        client_info.get("phone")
+        if client_info and client_info.get("phone")
+        else "не указан"
+    )
 
     return f"""
 {ADMIN_NEW_LEAD_TITLE}
@@ -92,14 +114,14 @@ def build_lead_message(user, text: str, history: list) -> str:
 👤 {username}
 🆔 {user.id}
 🔗 tg://user?id={user.id}
+📞 {phone}
 
-📩 Последнее сообщение:
+📩 Последнее действие:
 {text}
 
 📄 Диалог:
 {context_text}
 """
-
 
 # =======================
 # 🔹 ОСНОВНОЙ HANDLER
@@ -175,6 +197,74 @@ async def handle_gpt_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             context.user_data["lead_sent"] = True
             return
+
+
+        # =======================
+        # 📍 ГЕОЛОКАЦИЯ КЛИЕНТА
+        # =======================
+
+        # Если клиент отправил Telegram-геолокацию,
+        # формируем полноценную заявку менеджеру,
+        # прикладываем историю переписки
+        # и отдельно отправляем точку на карте.
+
+        if message.location:
+
+            lat = message.location.latitude
+            lon = message.location.longitude
+
+            # Добавляем геолокацию в историю диалога,
+            # чтобы менеджер видел её в контексте заявки.
+            full_history = append_if_not_duplicate(
+                history,
+                f"📍 Геолокация: {lat}, {lon}"
+            )
+
+            # Формируем красивую карточку заявки.
+            msg = build_lead_message(
+                user,
+                f"📍 Геолокация клиента: {lat}, {lon}",
+                full_history
+            )
+
+            # Отправляем текстовую заявку всем администраторам.
+            await notify_manager(
+                context,
+                msg
+            )
+
+            # Получаем список администраторов.
+            from database import get_all_admins
+
+            admins = get_all_admins(DB_PATH)
+
+            # Отправляем каждому администратору
+            # настоящую Telegram-геолокацию.
+            for admin in admins:
+                try:
+                    await context.bot.send_location(
+                        chat_id=admin["user_id"],
+                        latitude=lat,
+                        longitude=lon
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Ошибка отправки геолокации админу "
+                        f"{admin['user_id']}: {e}"
+                    )
+
+            # Красивое сообщение клиенту.
+            await message.reply_text(
+                "✅ Геолокация получена.\n\n"
+                "🚗 Ближайшая бригада уже получила адрес "
+                "и выехала к вам.\n\n"
+                "📞 При необходимости менеджер свяжется "
+                "с вами для уточнения деталей."
+            )
+
+            context.user_data["lead_sent"] = True
+            return
+
 
         # =======================
         # 🔥 СОХРАНЯЕМ СООБЩЕНИЕ
