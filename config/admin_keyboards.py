@@ -20,6 +20,7 @@ from telegram import ReplyKeyboardMarkup
 
 from config.buttons import (
     BTN_BACK,
+    BTN_BACKUP,
     BTN_PREVIOUS,
     BTN_CANCEL,
     BTN_SEND,
@@ -175,7 +176,7 @@ def get_knowledge_base_keyboard():
             [BTN_CHANGE_SITE],
             [BTN_CHECK_CHANGES],
             [BTN_BUILD_NEW_BASE],
-            [BTN_ACTIVATE_NEW_BASE],
+            [BTN_ACTIVATE_NEW_BASE, BTN_BACKUP],
             [BTN_KNOWLEDGE_STATUS],
             [BTN_PREVIOUS]
         ],

@@ -858,6 +858,17 @@ async def handle_knowledge_status(update, context):
         "🚧 Статус базы пока находится в разработке."
     )
 
+# ======================================================
+# Откат базы знаний на предыдущую рабочую версию
+# ======================================================
+async def handle_backup_restore(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE
+):
+    await update.message.reply_text(
+        "⏪ Функция восстановления резервной копии пока не реализована."
+    )
+
 
 async def save_rag_source_url(
     update: Update,
@@ -1173,6 +1184,10 @@ def get_admin_handlers():
         MessageHandler(
             filters.Text(btn.BTN_ACTIVATE_NEW_BASE),
             handle_activate_new_base
+        ),
+        MessageHandler(
+            filters.Text(btn.BTN_BACKUP),
+            handle_backup_restore
         ),
 
         MessageHandler(
