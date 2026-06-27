@@ -10,6 +10,7 @@
 
 # admin.py
 
+import os
 import asyncio
 import re
 from typing import List
@@ -35,20 +36,57 @@ import telegram
 from telegram.ext import ContextTypes, MessageHandler, filters, ConversationHandler, CallbackQueryHandler
 import logging
 from database import get_last_n_messages, get_total_users, get_client_info, search_clients, get_top_requests, get_total_clients_count, get_paginated_messages, get_total_messages_count, get_clients_paginated
-from handlers.utilities import go_back
+from handlers.utilities import go_back, cancel_current_action
 from handlers.admin_management import add_admin_start, handle_admin_input, remove_admin_start, show_admins_menu
 
 from config import buttons as btn
 
 logger = logging.getLogger(__name__)
 
-# Состояния
+# ==========================================================
+# СОСТОЯНИЯ ConversationHandler
+#
+# Каждый ConversationHandler использует уникальный числовой
+# идентификатор состояния, в котором находится пользователь.
+#
+# Пример:
+#
+# Пользователь нажал:
+# "🔍 Поиск клиента"
+#
+# Бот переходит в состояние:
+# AWAITING_SEARCH_QUERY
+#
+# и начинает ожидать ввод поискового запроса.
+# ==========================================================
+
+# Ожидание поискового запроса администратора.
 AWAITING_SEARCH_QUERY = 1
+
+# Ожидание выбора типа рассылки.
 AWAITING_BROADCAST_TYPE = 10
+
+# Ожидание текста рассылки.
 AWAITING_BROADCAST_TEXT = 11
+
+# Ожидание подтверждения отправки рассылки.
 AWAITING_BROADCAST_CONFIRM = 12
+
+# Ожидание сообщения для конкретного клиента.
 AWAITING_MESSAGE_TO_CLIENT = 20
-PAGE_SIZE = 20
+
+# Ожидание нового адреса сайта для RAG-парсера.
+AWAITING_RAG_SOURCE_URL = 30
+
+
+# ==========================================================
+# НАСТРОЙКИ ИНТЕРФЕЙСА
+#
+# Параметры отображения интерфейса и пагинации.
+# ==========================================================
+
+# Количество пользователей на одной странице списка.
+PAGE_SIZE = 10
 
 
 # Проверяет, является ли пользователь администратором и при необходимости показывает админ-панель.
@@ -78,6 +116,8 @@ async def show_knowledge_base_menu(update: Update, context: ContextTypes.DEFAULT
     )
 
 # Показывает главное меню административной панели.
+
+
 async def show_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показывает админ-панель и запоминает предыдущее состояние"""
     if context.user_data.get('previous_state') != 'admin_panel':
@@ -224,6 +264,7 @@ async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Запускает режим отправки сообщения конкретному клиенту.
 async def start_write_to_client(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["cancel_target"] = show_admin_panel
     query = update.callback_query
     await query.answer()
     try:
@@ -342,6 +383,7 @@ def format_client(client: dict) -> tuple[str, InlineKeyboardMarkup]:
 
 # Запускает поиск клиентов по имени, телефону или username.
 async def start_client_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["cancel_target"] = show_admin_panel
     await update.message.reply_text(
         "🔍 Введите запрос для поиска:\n"
         "• Телефон (от 4 цифр)\n• Username (от 3 символов)\n• Имя/фамилия (от 5 букв)\n\n"
@@ -456,6 +498,7 @@ async def handle_call_request(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 # Запускает мастер создания рассылки.
 async def start_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["cancel_target"] = show_admin_panel
     await update.message.reply_text(
         "📤 Выберите тип рассылки:",
         reply_markup=get_broadcast_type_keyboard()
@@ -768,10 +811,28 @@ async def handle_chat_navigation(update: Update, context: ContextTypes.DEFAULT_T
         await query.message.reply_text("Неизвестное действие.")
 
 
-async def handle_change_site(update, context):
-    await update.message.reply_text(
-        "🚧 Изменение сайта пока находится в разработке."
+# Запускает сценарий изменения сайта для базы знаний.
+async def handle_change_site(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE
+):
+    context.user_data["cancel_target"] = show_knowledge_base_menu
+    current_url = os.getenv(
+        "RAG_SOURCE_URL",
+        "Не настроен"
     )
+
+    await update.message.reply_text(
+        f"📚 {btn.BTN_KNOWLEDGE_BASE}\n\n"
+        f"Текущий источник знаний:\n\n"
+        f"{current_url}\n\n"
+        f"Введите новый адрес сайта.\n\n"
+        f"Для отмены нажмите кнопку:\n"
+        f"{btn.BTN_CANCEL}",
+        reply_markup=get_cancel_keyboard()
+    )
+
+    return AWAITING_RAG_SOURCE_URL
 
 
 async def handle_check_changes(update, context):
@@ -798,45 +859,110 @@ async def handle_knowledge_status(update, context):
     )
 
 
-# Регистрирует и возвращает все обработчики административного раздела.
+async def save_rag_source_url(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+    new_url = update.message.text.strip()
+
+    # пока просто сохраняем в память бота
+    context.bot_data["rag_source_url"] = new_url
+
+    await update.message.reply_text(
+        f"✅ Новый источник знаний сохранён:\n\n"
+        f"{new_url}",
+        reply_markup=get_knowledge_base_keyboard()
+    )
+
+    return ConversationHandler.END
+
+# ==========================================================
+# РЕГИСТРАЦИЯ ОБРАБОТЧИКОВ АДМИНИСТРАТИВНОЙ ПАНЕЛИ
+# ==========================================================
+
+
 def get_admin_handlers():
+
+    # ======================================================
+    # Поиск клиента
+    # ======================================================
     search_conversation = ConversationHandler(
-        entry_points=[MessageHandler(filters.Text(
-            btn.BTN_CLIENT_SEARCH), start_client_search)],
+        entry_points=[
+            MessageHandler(
+                filters.Text(btn.BTN_CLIENT_SEARCH),
+                start_client_search
+            )
+        ],
         states={
             AWAITING_SEARCH_QUERY: [
-                MessageHandler(filters.Text(btn.BTN_CANCEL),
-                               cancel_search),
-                MessageHandler(filters.TEXT & ~filters.COMMAND,
-                               handle_search_query),
+                MessageHandler(
+                    filters.Text(btn.BTN_CANCEL),
+                    cancel_current_action
+                ),
+                MessageHandler(
+                    filters.TEXT & ~filters.COMMAND,
+                    handle_search_query
+                ),
             ]
         },
         fallbacks=[],
         allow_reentry=True
     )
 
+    # ======================================================
+    # Массовая рассылка
+    # ======================================================
     broadcast_conversation = ConversationHandler(
-        entry_points=[MessageHandler(
-            filters.Text(btn.BTN_BROADCAST), start_broadcast)],
+        entry_points=[
+            MessageHandler(
+                filters.Text(btn.BTN_BROADCAST),
+                start_broadcast
+            )
+        ],
         states={
-            AWAITING_BROADCAST_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_broadcast_type)],
-            AWAITING_BROADCAST_TEXT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_broadcast_text)],
-            AWAITING_BROADCAST_CONFIRM: [MessageHandler(
-                filters.TEXT & ~filters.COMMAND, perform_broadcast)]
+            AWAITING_BROADCAST_TYPE: [
+                MessageHandler(
+                    filters.TEXT & ~filters.COMMAND,
+                    handle_broadcast_type
+                )
+            ],
+            AWAITING_BROADCAST_TEXT: [
+                MessageHandler(
+                    filters.TEXT & ~filters.COMMAND,
+                    handle_broadcast_text
+                )
+            ],
+            AWAITING_BROADCAST_CONFIRM: [
+                MessageHandler(
+                    filters.TEXT & ~filters.COMMAND,
+                    perform_broadcast
+                )
+            ]
         },
         fallbacks=[],
         allow_reentry=True
     )
 
+    # ======================================================
+    # Написать клиенту
+    # ======================================================
     write_conversation = ConversationHandler(
-        entry_points=[CallbackQueryHandler(
-            start_write_to_client, pattern=r"^write_\d+$")],
+        entry_points=[
+            CallbackQueryHandler(
+                start_write_to_client,
+                pattern=r"^write_\d+$"
+            )
+        ],
         states={
             AWAITING_MESSAGE_TO_CLIENT: [
-                MessageHandler(filters.Text(btn.BTN_CANCEL),
-                               cancel_write_to_client),
-                MessageHandler(filters.TEXT & ~filters.COMMAND,
-                               send_message_to_client)
+                MessageHandler(
+                    filters.Text(btn.BTN_CANCEL),
+                    cancel_current_action
+                ),
+                MessageHandler(
+                    filters.TEXT & ~filters.COMMAND,
+                    send_message_to_client
+                )
             ]
         },
         fallbacks=[
@@ -846,33 +972,108 @@ def get_admin_handlers():
         allow_reentry=True
     )
 
-    # Управление админами — тоже через ConversationHandler
+# ======================================================
+# Добавление администратора
+# ======================================================
     admin_add_conversation = ConversationHandler(
-        entry_points=[MessageHandler(filters.Text(
-            btn.BTN_ADD_ADMIN), add_admin_start)],
+        entry_points=[
+            MessageHandler(
+                filters.Text(btn.BTN_ADD_ADMIN),
+                add_admin_start
+            )
+        ],
         states={
-            1: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_input)]
+            1: [
+                MessageHandler(
+                    filters.Text(btn.BTN_CANCEL),
+                    cancel_current_action
+                ),
+
+                MessageHandler(
+                    filters.TEXT & ~filters.COMMAND,
+                    handle_admin_input
+                )
+            ]
         },
-        fallbacks=[MessageHandler(
-            filters.ALL, cancel_admin_conversation)],
+        fallbacks=[
+            MessageHandler(
+                filters.ALL,
+                cancel_current_action
+            )
+        ],
         allow_reentry=True
     )
 
+    # ======================================================
+    # Удаление администратора
+    # ======================================================
     admin_remove_conversation = ConversationHandler(
-        entry_points=[MessageHandler(filters.Text(
-            btn.BTN_REMOVE_ADMIN), remove_admin_start)],
+        entry_points=[
+            MessageHandler(
+                filters.Text(btn.BTN_REMOVE_ADMIN),
+                remove_admin_start
+            )
+        ],
         states={
-            1: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_input)]
+            1: [
+                MessageHandler(
+                    filters.Text(btn.BTN_CANCEL),
+                    cancel_current_action
+                ),
+
+                MessageHandler(
+                    filters.TEXT & ~filters.COMMAND,
+                    handle_admin_input
+                )
+            ]
         },
-        fallbacks=[MessageHandler(
-            filters.ALL, cancel_admin_conversation)],
+        fallbacks=[
+            MessageHandler(
+                filters.ALL,
+                cancel_current_action
+            )
+        ],
         allow_reentry=True
     )
 
-    # Основной обработчик для кнопок админ-панели
+    # ======================================================
+    # Изменение сайта базы знаний
+    # ======================================================
+    change_site_conversation = ConversationHandler(
+        entry_points=[
+            MessageHandler(
+                filters.Text(btn.BTN_CHANGE_SITE),
+                handle_change_site
+            )
+        ],
+        states={
+            AWAITING_RAG_SOURCE_URL: [
+                MessageHandler(
+                    filters.Text(btn.BTN_CANCEL),
+                    cancel_current_action
+                ),
+                MessageHandler(
+                    filters.TEXT & ~filters.COMMAND,
+                    save_rag_source_url
+                ),
+            ]
+        },
+        fallbacks=[
+            MessageHandler(
+                filters.Text(btn.BTN_CANCEL),
+                cancel_current_action
+            )
+        ],
+        allow_reentry=True
+    )
+
+    # ======================================================
+    # Общий обработчик кнопок админ-панели
+    # ======================================================
     admin_actions_handler = MessageHandler(
         filters.Text([
-            # Основное меню админки
+
+            # Основное меню
             btn.BTN_STATS,
             btn.BTN_TOP_REQUESTS,
             btn.BTN_USERS,
@@ -892,40 +1093,71 @@ def get_admin_handlers():
             # Навигация
             btn.BTN_PREVIOUS,
             btn.BTN_BACK,
-            btn.BTN_CANCEL
+            btn.BTN_CANCEL,
+
         ]),
         handle_admin_actions
     )
 
-    # Обработчики колбэков
+    # ======================================================
+    # Callback-кнопки
+    # ======================================================
     callback_handlers = [
-        CallbackQueryHandler(show_chat_history, pattern=r"^chat_\d+$"),
-        CallbackQueryHandler(handle_call_request, pattern=r"^call_\d+$"),
-        CallbackQueryHandler(handle_chat_navigation,
-                             pattern=r"^chat_page_\d+$"),
-        CallbackQueryHandler(handle_chat_navigation,
-                             pattern=r"^back_to_users$"),
-        CallbackQueryHandler(handle_chat_navigation,
-                             pattern=r"^(chat_page_|back_to_users)$"),
+        CallbackQueryHandler(
+            show_chat_history,
+            pattern=r"^chat_\d+$"
+        ),
+        CallbackQueryHandler(
+            handle_call_request,
+            pattern=r"^call_\d+$"
+        ),
+        CallbackQueryHandler(
+            handle_chat_navigation,
+            pattern=r"^chat_page_\d+$"
+        ),
+        CallbackQueryHandler(
+            handle_chat_navigation,
+            pattern=r"^back_to_users$"
+        ),
+        CallbackQueryHandler(
+            handle_chat_navigation,
+            pattern=r"^(chat_page_|back_to_users)$"
+        ),
     ]
 
+    # ======================================================
+    # Возвращаем все обработчики
+    # ======================================================
     return [
+
+        # ConversationHandler
         search_conversation,
         broadcast_conversation,
         write_conversation,
         admin_add_conversation,
         admin_remove_conversation,
+        change_site_conversation,
+
+        # Общие кнопки админки
         admin_actions_handler,
-        MessageHandler(filters.Text(btn.BTN_SETTINGS), show_settings_menu),
-        MessageHandler(filters.Text(btn.BTN_ADMINS),
-                       show_admins_menu),
+
+        MessageHandler(
+            filters.Text(btn.BTN_SETTINGS),
+            show_settings_menu
+        ),
+
+        MessageHandler(
+            filters.Text(btn.BTN_ADMINS),
+            show_admins_menu
+        ),
+
+        # ==================================================
+        # Управление базой знаний
+        # ==================================================
+
         MessageHandler(
             filters.Text(btn.BTN_KNOWLEDGE_BASE),
             show_knowledge_base_menu
-        ),
-        MessageHandler(
-            filters.Text(btn.BTN_CHANGE_SITE),
-            handle_change_site
         ),
 
         MessageHandler(
@@ -947,6 +1179,7 @@ def get_admin_handlers():
             filters.Text(btn.BTN_KNOWLEDGE_STATUS),
             handle_knowledge_status
         ),
-        
+
+        # CallbackQuery
         *callback_handlers,
     ]

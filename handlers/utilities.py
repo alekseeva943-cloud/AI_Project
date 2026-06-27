@@ -10,7 +10,7 @@ from prompts.service_prompts import (
 import logging
 
 from telegram import ReplyKeyboardRemove, Update
-from telegram.ext import ContextTypes, CommandHandler, MessageHandler, filters
+from telegram.ext import ContextTypes, CommandHandler, MessageHandler, filters, ConversationHandler
 
 from config.keyboards import (
     get_services_keyboard,
@@ -71,6 +71,17 @@ async def go_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_auto_help_submenu(update, context)
     else:
         await show_main_menu(update, context)
+
+
+# Выполняет возврат на шаг назад.
+async def cancel_current_action(update, context):
+    target = context.user_data.get("cancel_target")
+
+    if target:
+        await target(update, context)
+
+    return ConversationHandler.END
+
 
 
 # =======================
