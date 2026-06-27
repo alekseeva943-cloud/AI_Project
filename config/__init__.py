@@ -7,19 +7,23 @@ from .config import (
     SUPERADMIN_ID,
     CONTEXT_MESSAGE_COUNT,
     ADMIN_QUEUE,
-    get_main_keyboard,
-    get_admin_keyboard,
-    get_settings_keyboard,
-    get_admins_management_keyboard,
     get_empty_keyboard,
     is_admin
 )
+
+from .keyboards import get_main_keyboard
 
 # Для обратной совместимости (если где-то используется)
 from .config import (
     TELEGRAM_TOKEN as TOKEN,
     OPENAI_API_KEY as OPENAI_KEY,
     MANAGER_CHAT_ID as MANAGER_ID,
+)
+
+from .admin_keyboards import (
+    get_admin_keyboard,
+    get_settings_keyboard,
+    get_admins_management_keyboard
 )
 
 __all__ = [

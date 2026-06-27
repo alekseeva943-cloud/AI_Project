@@ -1,4 +1,6 @@
 # utilities.py
+# Файл отвечает за работу служебных меню, клавиатур, контактов,
+# отображение услуг, автопомощи и регистрацию служебных обработчиков.
 
 from prompts.service_prompts import (
     SERVICES_PROMPTS,
@@ -7,8 +9,16 @@ from prompts.service_prompts import (
 )
 import logging
 
-from telegram import ReplyKeyboardRemove, Update, KeyboardButton, ReplyKeyboardMarkup
+from telegram import ReplyKeyboardRemove, Update
 from telegram.ext import ContextTypes, CommandHandler, MessageHandler, filters
+
+from config.keyboards import (
+    get_services_keyboard,
+    get_auto_help_keyboard,
+    get_help_keyboard,
+    get_contact_keyboard,
+    get_back_keyboard
+)
 
 from config import is_admin, get_main_keyboard
 from config.config import CONTEXT_MESSAGE_COUNT
@@ -19,31 +29,10 @@ logger = logging.getLogger(__name__)
 
 
 # =======================
-# 🔹 КЛАВИАТУРЫ
-# =======================
-
-def get_services_keyboard():
-    return ReplyKeyboardMarkup([
-        [KeyboardButton("🛞 Шиномонтаж"), KeyboardButton("❄️ Кондиционер")],
-        [KeyboardButton("🚗 Хранение"), KeyboardButton("🔧 Авто-помощь")],
-        [KeyboardButton("⬅️ Вернуться")]
-    ], resize_keyboard=True)
-
-
-def get_auto_help_keyboard():
-    return ReplyKeyboardMarkup([
-        [KeyboardButton("⛽ Подвоз топлива"),
-         KeyboardButton("💡 Запуск двигателя")],
-        [KeyboardButton("🔒 Отключение сигнализации"),
-         KeyboardButton("💻 Компьютерная диагностика")],
-        [KeyboardButton("⬅️ Вернуться")]
-    ], resize_keyboard=True)
-
-
-# =======================
 # 🔹 МЕНЮ
 # =======================
 
+# Показывает главное меню бота и очищает временный GPT-контекст пользователя.
 async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
 
@@ -53,27 +42,23 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     reply_markup = get_main_keyboard(is_admin_user=is_admin(user.id))
 
-    await update.message.reply_text("Выберите услугу:", reply_markup=reply_markup)
-
-
-async def show_help_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data['previous_state'] = 'main_menu'
-
-    keyboard = [
-        [KeyboardButton("🛞 Спустило колесо"), KeyboardButton("⛽ Нет топлива")],
-        [KeyboardButton("🚗 Не заводится"), KeyboardButton("❄️ Отогреть")],
-        [KeyboardButton("🌬 Кондиционер"), KeyboardButton("⚡ Электрика")],
-        [KeyboardButton("🔓 Вскрыть"), KeyboardButton("💻 Диагностика")],
-        [KeyboardButton("❓ Прочее")],
-        [KeyboardButton("⬅️ Вернуться")]
-    ]
-
     await update.message.reply_text(
-        "Здравствуйте! Что случилось?",
-        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        "Выберите услугу:",
+        reply_markup=reply_markup
     )
 
 
+# Показывает меню экстренной помощи на дороге.
+async def show_help_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['previous_state'] = 'main_menu'
+
+    await update.message.reply_text(
+        "Здравствуйте! Что случилось?",
+        reply_markup=get_help_keyboard()
+    )
+
+
+# Выполняет возврат пользователя в предыдущее меню.
 async def go_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
     state = context.user_data.get('previous_state')
 
@@ -91,6 +76,7 @@ async def go_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # 🔹 ОБРАБОТКА КНОПОК
 # =======================
 
+# Обрабатывает выбор причины обращения в меню помощи.
 async def handle_help_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['previous_state'] = 'help_menu'
 
@@ -108,14 +94,11 @@ async def handle_help_choice(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await update.message.reply_text(
         reply,
         parse_mode="HTML",
-        reply_markup=ReplyKeyboardMarkup([
-            [KeyboardButton("📞 Оставить телефон", request_contact=True)],
-            [KeyboardButton("📍 Отправить локацию", request_location=True)],
-            [KeyboardButton("⬅️ Вернуться")]
-        ], resize_keyboard=True)
+        reply_markup=get_contact_keyboard()
     )
 
 
+# Показывает список основных услуг компании.
 async def handle_services(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['previous_state'] = 'main_menu'
 
@@ -125,6 +108,7 @@ async def handle_services(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+# Показывает подробное описание выбранной основной услуги.
 async def show_service_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Показывает описание основной услуги.
@@ -146,13 +130,11 @@ async def show_service_details(update: Update, context: ContextTypes.DEFAULT_TYP
     await update.message.reply_text(
         text,
         parse_mode="HTML",
-        reply_markup=ReplyKeyboardMarkup(
-            [[KeyboardButton("⬅️ Вернуться")]],
-            resize_keyboard=True
-        )
+        reply_markup=get_back_keyboard()
     )
 
 
+# Показывает подменю раздела Авто-помощь.
 async def show_auto_help_submenu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['previous_state'] = 'services_menu'
 
@@ -162,6 +144,7 @@ async def show_auto_help_submenu(update: Update, context: ContextTypes.DEFAULT_T
     )
 
 
+# Показывает подробное описание выбранной услуги автопомощи.
 async def show_auto_help_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Показывает описание услуги из раздела Авто-помощь.
@@ -183,10 +166,7 @@ async def show_auto_help_details(update: Update, context: ContextTypes.DEFAULT_T
     await update.message.reply_text(
         text,
         parse_mode="HTML",
-        reply_markup=ReplyKeyboardMarkup(
-            [[KeyboardButton("⬅️ Вернуться")]],
-            resize_keyboard=True
-        )
+        reply_markup=get_back_keyboard()
     )
 
 
@@ -194,11 +174,13 @@ async def show_auto_help_details(update: Update, context: ContextTypes.DEFAULT_T
 # 🔹 СЛУЖЕБНОЕ
 # =======================
 
+# Показывает Telegram ID пользователя.
 async def show_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     await update.message.reply_text(f"Ваш ID: {user_id}")
 
 
+# Обрабатывает отправленную пользователем геолокацию.
 async def handle_real_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     location = update.message.location
@@ -223,6 +205,7 @@ async def handle_real_location(update: Update, context: ContextTypes.DEFAULT_TYP
     )
 
 
+# Обрабатывает отправленный пользователем номер телефона.
 async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     phone = update.message.contact.phone_number
@@ -249,6 +232,7 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # 🔹 РЕГИСТРАЦИЯ
 # =======================
 
+# Возвращает список служебных обработчиков Telegram-бота.
 def get_utility_handlers():
     return [
         CommandHandler("id", show_id),
@@ -258,15 +242,13 @@ def get_utility_handlers():
     ]
 
 
+# Показывает контактную информацию компании.
 async def show_contacts(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показывает контакты компании"""
 
     context.user_data['previous_state'] = 'main_menu'
 
-    reply_markup = ReplyKeyboardMarkup(
-        [[KeyboardButton("⬅️ Вернуться")]],
-        resize_keyboard=True
-    )
+    reply_markup = get_back_keyboard()
 
     # 📞 Отправляем контакт
     await update.message.reply_contact(
@@ -282,4 +264,7 @@ async def show_contacts(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Работаем круглосуточно 🚗"
     )
 
-    await update.message.reply_text(text, reply_markup=reply_markup)
+    await update.message.reply_text(
+        text,
+        reply_markup=reply_markup
+    )

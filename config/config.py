@@ -7,8 +7,6 @@ from collections import defaultdict
 from dotenv import load_dotenv
 
 from telegram import (
-    ReplyKeyboardMarkup,
-    KeyboardButton,
     ReplyKeyboardRemove
 )
 
@@ -71,60 +69,6 @@ ADMIN_QUEUE = defaultdict(list)
 # =======================
 # 🔹 КЛАВИАТУРЫ
 # =======================
-
-def get_main_keyboard(is_admin_user: bool = False):
-    keyboard = [
-        [KeyboardButton("🆘 Нужна помощь")],
-        [
-            KeyboardButton("📞 Оставить телефон", request_contact=True),
-            KeyboardButton("📍 Отправить локацию", request_location=True)
-        ],
-        [
-            KeyboardButton("🛠 Наши услуги"),
-            KeyboardButton("📱 Наши контакты")
-        ]
-    ]
-
-    if is_admin_user:
-        keyboard.insert(0, [KeyboardButton("🛠 Админка")])
-
-    return ReplyKeyboardMarkup(
-        keyboard=keyboard,
-        resize_keyboard=True
-    )
-
-
-def get_admin_keyboard():
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            ["📢 Рассылка", "🔍 Поиск клиентов"],
-            ["📊 Статистика", "📈 Топ запросов"],
-            ["⚙️ Настройки", "👥 Пользователи"],
-            ["⬅️ Вернуться"]
-        ],
-        resize_keyboard=True
-    )
-
-
-def get_settings_keyboard():
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            ["👥 Админы"],
-            ["⬅️ Назад"]
-        ],
-        resize_keyboard=True
-    )
-
-
-def get_admins_management_keyboard():
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            ["➕ Добавить админа", "🗑 Удалить админа"],
-            ["⬅️ Назад"]
-        ],
-        resize_keyboard=True
-    )
-
 
 def get_empty_keyboard():
     return ReplyKeyboardRemove()

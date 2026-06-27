@@ -2,7 +2,9 @@
 
 from telegram import Update
 from telegram.ext import ContextTypes
-from config.config import get_admin_keyboard, get_main_keyboard, is_admin
+from config.config import is_admin
+from config.keyboards import get_main_keyboard
+from config.admin_keyboards import get_admin_keyboard
 
 
 async def main_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):

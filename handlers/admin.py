@@ -1,14 +1,37 @@
 # admin.py
+# Файл отвечает за работу административной панели бота.
+# Здесь находятся:
+# - статистика;
+# - рассылки;
+# - поиск клиентов;
+# - просмотр переписок;
+# - управление пользователями;
+# - административные диалоги и служебные обработчики.
+
+# admin.py
 
 import asyncio
 import re
 from typing import List
-from config.config import get_settings_keyboard
+from config.keyboards import (
+    get_cancel_keyboard,
+    get_confirm_keyboard
+)
+from config.config import is_admin as is_admin_user
+
+from config.admin_keyboards import (
+    get_admin_keyboard,
+    get_settings_keyboard,
+    get_admins_management_keyboard,
+    get_broadcast_type_keyboard,
+    get_stats_keyboard,
+    get_top_requests_keyboard,
+    get_broadcast_confirm_keyboard
+)
 from database import add_message, get_all_active_user_ids, get_users_with_phone, mark_user_blocked
 from telegram import KeyboardButton, Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
 import telegram
 from telegram.ext import ContextTypes, MessageHandler, filters, ConversationHandler, CallbackQueryHandler
-from config import get_admin_keyboard, is_admin as is_admin_user
 import logging
 from database import get_last_n_messages, get_total_users, get_client_info, search_clients, get_top_requests, get_total_clients_count, get_paginated_messages, get_total_messages_count, get_clients_paginated
 from handlers.utilities import go_back
@@ -25,6 +48,7 @@ AWAITING_MESSAGE_TO_CLIENT = 20
 PAGE_SIZE = 20
 
 
+# Проверяет, является ли пользователь администратором и при необходимости показывает админ-панель.
 async def check_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     user = update.effective_user
     is_admin = is_admin_user(user.id)
@@ -34,12 +58,14 @@ async def check_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> boo
     return is_admin
 
 
+# Показывает раздел настроек администратора.
 async def show_settings_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показывает подменю 'Настройки'"""
     context.user_data['previous_state'] = 'settings_menu'
     await update.message.reply_text("⚙️ Настройки:", reply_markup=get_settings_keyboard())
 
 
+# Показывает главное меню административной панели.
 async def show_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показывает админ-панель и запоминает предыдущее состояние"""
     if context.user_data.get('previous_state') != 'admin_panel':
@@ -50,6 +76,7 @@ async def show_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🛠 Админ-панель:", reply_markup=get_admin_keyboard())
 
 
+# Формирует статистику популярных запросов за выбранный период.
 async def handle_top_requests_period(update: Update, context: ContextTypes.DEFAULT_TYPE, period_text: str):
     period_map = {"7 дней": 7, "30 дней": 30, "Полгода": 180, "Год": 365}
     days = period_map.get(period_text, 7)
@@ -72,6 +99,7 @@ async def handle_top_requests_period(update: Update, context: ContextTypes.DEFAU
     await update.message.reply_text(report, reply_markup=get_admin_keyboard())
 
 
+# Формирует статистику пользователей за выбранный период.
 async def handle_stats_period(update: Update, context: ContextTypes.DEFAULT_TYPE, period_text: str):
 
     period_map = {
@@ -104,6 +132,7 @@ async def handle_stats_period(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
 
 
+# Обрабатывает нажатия кнопок административной панели.
 async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_admin(update, context):
         return
@@ -117,7 +146,7 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text("🛠 В разработке: Настройки")
     elif text == "👥 Пользователи":
         await show_users_page(update, context, page=0)
-    elif text in ["⬅️ Вернуться", "⬅️ Назад", "⬅️ Отмена"]:
+    elif text in ["⬅️ Вернуться", "⬅️ Назад", "❌ Отмена"]:
         await go_back(update, context)
     elif text in ["📅 Сегодня", "📆 Неделя", "🗓 Месяц", "📈 Год"]:
         await handle_stats_period(update, context, text)
@@ -125,6 +154,7 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text("❓ Неизвестная команда")
 
 
+# Показывает расширенную статистику проекта.
 async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         from database import get_detailed_stats
@@ -148,6 +178,7 @@ async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Ошибка при загрузке данных")
 
 
+# Запускает режим отправки сообщения конкретному клиенту.
 async def start_write_to_client(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -172,12 +203,12 @@ async def start_write_to_client(update: Update, context: ContextTypes.DEFAULT_TY
     await query.message.reply_text(
         f"✏️ Введите сообщение для {target}:",
         parse_mode="HTML",
-        reply_markup=ReplyKeyboardMarkup(
-            [["❌ Отмена"]], resize_keyboard=True, one_time_keyboard=True)
+        reply_markup=get_cancel_keyboard()
     )
     return AWAITING_MESSAGE_TO_CLIENT
 
 
+# Отправляет введённое администратором сообщение клиенту.
 async def send_message_to_client(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.text.strip() == "❌ Отмена":
         context.user_data.pop('writing_to', None)
@@ -217,12 +248,14 @@ async def send_message_to_client(update: Update, context: ContextTypes.DEFAULT_T
     return ConversationHandler.END
 
 
+# Отменяет режим написания сообщения клиенту.
 async def cancel_write_to_client(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.pop('writing_to', None)
     await update.message.reply_text("Отменено.", reply_markup=get_admin_keyboard())
     return ConversationHandler.END
 
 
+# Формирует карточку клиента для отображения в админке.
 def format_client(client: dict) -> tuple[str, InlineKeyboardMarkup]:
     name_parts = []
     if client['first_name']:
@@ -263,18 +296,18 @@ def format_client(client: dict) -> tuple[str, InlineKeyboardMarkup]:
     return text, InlineKeyboardMarkup([buttons])
 
 
+# Запускает поиск клиентов по имени, телефону или username.
 async def start_client_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🔍 Введите запрос для поиска:\n"
         "• Телефон (от 4 цифр)\n• Username (от 3 символов)\n• Имя/фамилия (от 5 букв)\n\n"
-        "Нажмите «⬅️ Отмена», чтобы выйти.",
-        reply_markup=ReplyKeyboardMarkup([["⬅️ Отмена"]], resize_keyboard=True)
+        "Нажмите «⬅❌ Отмена», чтобы выйти.",
+        reply_markup=get_cancel_keyboard()
     )
     return AWAITING_SEARCH_QUERY
 
 
-
-
+# Отменяет поиск клиентов.
 async def cancel_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Поиск отменён.",
@@ -283,12 +316,16 @@ async def cancel_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
+# Завершает административный диалог.
 async def cancel_admin_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
+# Обрабатывает поисковый запрос администратора.
+
+
 async def handle_search_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
-    if text == "⬅️ Отмена":
+    if text == "❌ Отмена":
         await update.message.reply_text("Поиск отменён.", reply_markup=get_admin_keyboard())
         return ConversationHandler.END
 
@@ -307,6 +344,7 @@ async def handle_search_query(update: Update, context: ContextTypes.DEFAULT_TYPE
     return ConversationHandler.END
 
 
+# Открывает историю переписки выбранного клиента.
 async def show_chat_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -330,6 +368,7 @@ async def show_chat_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
 BROADCAST_TYPES = {"Всем клиентам": "all", "Только с телефоном": "with_phone"}
 
 
+# Приводит телефон к удобному для отображения формату.
 def format_phone_for_display(phone: str) -> str:
     digits = re.sub(r'\D', '', phone)
     if len(digits) == 11 and digits.startswith('7'):
@@ -339,6 +378,7 @@ def format_phone_for_display(phone: str) -> str:
     return phone
 
 
+# Показывает администратору данные для звонка клиенту.
 async def handle_call_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -390,12 +430,17 @@ async def handle_call_request(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.message.reply_text("\n".join(parts), parse_mode="HTML", disable_web_page_preview=True)
 
 
+# Запускает мастер создания рассылки.
 async def start_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [["Всем клиентам", "Только с телефоном"], ["❌ Отмена"]]
-    await update.message.reply_text("📤 Выберите тип рассылки:", reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
+    await update.message.reply_text(
+        "📤 Выберите тип рассылки:",
+        reply_markup=get_broadcast_type_keyboard()
+    )
+
     return AWAITING_BROADCAST_TYPE
 
 
+# Обрабатывает выбор типа рассылки.
 async def handle_broadcast_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
     if text == "❌ Отмена":
@@ -406,10 +451,11 @@ async def handle_broadcast_type(update: Update, context: ContextTypes.DEFAULT_TY
         return AWAITING_BROADCAST_TYPE
 
     context.user_data['broadcast_type'] = BROADCAST_TYPES[text]
-    await update.message.reply_text("✏️ Введите текст рассылки:", reply_markup=ReplyKeyboardMarkup([["❌ Отмена"]], resize_keyboard=True))
+    await update.message.reply_text("✏️ Введите текст рассылки:", reply_markup=get_cancel_keyboard())
     return AWAITING_BROADCAST_TEXT
 
 
+# Сохраняет текст рассылки и готовит подтверждение отправки.
 async def handle_broadcast_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
     if text == "❌ Отмена":
@@ -427,12 +473,12 @@ async def handle_broadcast_text(update: Update, context: ContextTypes.DEFAULT_TY
 
     await update.message.reply_text(
         f"📤 Подтверждение:\nТип: {text}\nПолучателей: {len(recipients)}\n✅ Отправить | ❌ Отмена",
-        reply_markup=ReplyKeyboardMarkup(
-            [["✅ Отправить", "❌ Отмена"]], resize_keyboard=True)
+        reply_markup=get_broadcast_confirm_keyboard()
     )
     return AWAITING_BROADCAST_CONFIRM
 
 
+# Выполняет массовую рассылку пользователям.
 async def perform_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Выполнение рассылки"""
     if update.message.text.strip() != "✅ Отправить":
@@ -516,27 +562,23 @@ async def perform_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
+# Показывает меню выбора периода топа запросов.
 async def show_top_requests_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [["7 дней", "30 дней"], ["Полгода", "Год"], ["⬅️ Назад"]]
-    await update.message.reply_text("📊 Выберите период:", reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
-
-
-async def show_stats_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        ["📅 Сегодня", "📆 Неделя"],
-        ["🗓 Месяц", "📈 Год"],
-        ["⬅️ Назад"]
-    ]
-
     await update.message.reply_text(
-        "📊 Выберите период статистики:",
-        reply_markup=ReplyKeyboardMarkup(
-            keyboard,
-            resize_keyboard=True
-        )
+        "📊 Выберите период:",
+        reply_markup=get_stats_keyboard()
     )
 
 
+# Показывает меню выбора периода статистики.
+async def show_stats_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "📊 Выберите период статистики:",
+        reply_markup=get_top_requests_keyboard()
+    )
+
+
+# Показывает страницу списка пользователей.
 async def show_users_page(update: Update, context: ContextTypes.DEFAULT_TYPE, page: int = 0):
     """Показывает страницу с пользователями (новые сверху) — по одному сообщению на клиента."""
     offset = page * PAGE_SIZE
@@ -588,6 +630,7 @@ async def show_users_page(update: Update, context: ContextTypes.DEFAULT_TYPE, pa
         )
 
 
+# Обрабатывает переключение страниц пользователей.
 async def handle_users_navigation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -605,6 +648,7 @@ async def handle_users_navigation(update: Update, context: ContextTypes.DEFAULT_
 
 
 # --- Обновлённый обработчик истории с пагинацией ---
+# Открывает историю переписки выбранного клиента.
 async def show_chat_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -619,6 +663,7 @@ async def show_chat_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await show_chat_page(update, context, page=0)
 
 
+# Показывает страницу истории переписки клиента.
 async def show_chat_page(update: Update, context: ContextTypes.DEFAULT_TYPE, page: int = 0):
     query = update.callback_query
     user_id = context.user_data.get('viewing_chat_of')
@@ -678,6 +723,7 @@ async def show_chat_page(update: Update, context: ContextTypes.DEFAULT_TYPE, pag
     await query.edit_message_text(history, reply_markup=keyboard)
 
 
+# Обрабатывает навигацию по истории переписки.
 async def handle_chat_navigation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -698,13 +744,14 @@ async def handle_chat_navigation(update: Update, context: ContextTypes.DEFAULT_T
         await query.message.reply_text("Неизвестное действие.")
 
 
+# Регистрирует и возвращает все обработчики административного раздела.
 def get_admin_handlers():
     search_conversation = ConversationHandler(
         entry_points=[MessageHandler(filters.Text(
             "🔍 Поиск клиентов"), start_client_search)],
         states={
             AWAITING_SEARCH_QUERY: [
-                MessageHandler(filters.Text("⬅️ Отмена"),
+                MessageHandler(filters.Text("❌ Отмена"),
                                cancel_search),
                 MessageHandler(filters.TEXT & ~filters.COMMAND,
                                handle_search_query),
@@ -791,7 +838,7 @@ def get_admin_handlers():
             # Навигация
             "⬅️ Назад",
             "⬅️ Вернуться",
-            "⬅️ Отмена"
+            "❌ Отмена"
         ]),
         handle_admin_actions
     )

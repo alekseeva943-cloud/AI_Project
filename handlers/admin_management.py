@@ -2,7 +2,8 @@
 
 from telegram import Update
 from telegram.ext import ContextTypes
-from config import get_admins_management_keyboard, SUPERADMIN_ID
+from config.admin_keyboards import get_admins_management_keyboard
+from config.config import SUPERADMIN_ID
 from database import get_all_admins, add_admin, remove_admin, DB_PATH
 import logging
 
