@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[oc]
+*.pyo
+
+# Build
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual env
+.venv/
+
+# Env variables
+.env
+
+# Data (generated files)
+data/
+
+# OS
+.DS_Store
+Thumbs.db

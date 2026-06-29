@@ -847,10 +847,33 @@ async def handle_build_new_base(update, context):
     )
 
 
-async def handle_activate_new_base(update, context):
-    await update.message.reply_text(
-        "🚧 Активация новой базы пока находится в разработке."
+# ======================================================
+# Активирует новую базу знаний
+# ======================================================
+async def handle_activate_new_base(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE
+):
+    from services.knowledge_base_manager import (
+        activate_new_base
     )
+
+    await update.message.reply_text(
+        "🔄 Начинаю активацию новой базы..."
+    )
+
+    success = activate_new_base()
+
+    if success:
+        await update.message.reply_text(
+            "✅ Новая база успешно активирована.\n\n"
+            "📦 Предыдущая версия сохранена в резервной копии."
+        )
+    else:
+        await update.message.reply_text(
+            "❌ Не удалось активировать новую базу.\n\n"
+            "Проверьте логи сервера."
+        )
 
 
 async def handle_knowledge_status(update, context):
