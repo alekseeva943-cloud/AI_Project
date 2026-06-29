@@ -21,6 +21,7 @@ from telegram import ReplyKeyboardMarkup
 from config.buttons import (
     BTN_BACK,
     BTN_BACKUP,
+    BTN_CRAWL_LIMIT,
     BTN_PREVIOUS,
     BTN_CANCEL,
     BTN_SEND,
@@ -173,11 +174,18 @@ def get_broadcast_confirm_keyboard():
 def get_knowledge_base_keyboard():
     return ReplyKeyboardMarkup(
         keyboard=[
-            [BTN_CHANGE_SITE],
-            [BTN_CHECK_CHANGES],
-            [BTN_BUILD_NEW_BASE],
+
+            # Основной рабочий цикл
+            [BTN_CHECK_CHANGES, BTN_BUILD_NEW_BASE],
             [BTN_ACTIVATE_NEW_BASE, BTN_BACKUP],
+
+            # Информация о состоянии
             [BTN_KNOWLEDGE_STATUS],
+
+            # Настройки источника и парсинга
+            [BTN_CHANGE_SITE, BTN_CRAWL_LIMIT],
+
+            # Навигация
             [BTN_PREVIOUS]
         ],
         resize_keyboard=True

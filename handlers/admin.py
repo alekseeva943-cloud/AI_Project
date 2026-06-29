@@ -81,6 +81,9 @@ AWAITING_MESSAGE_TO_CLIENT = 20
 # Ожидание нового адреса сайта для RAG-парсера.
 AWAITING_RAG_SOURCE_URL = 30
 
+# Состояние кол-ва страниц для парсера
+AWAITING_CRAWL_LIMIT = 1002
+
 
 # ==========================================================
 # НАСТРОЙКИ ИНТЕРФЕЙСА
@@ -853,6 +856,55 @@ async def handle_change_site(
     return AWAITING_RAG_SOURCE_URL
 
 
+# ======================================================
+# Запускает сценарий изменения лимита страниц.
+#
+# Позволяет указать:
+# 10  -> парсить 10 страниц
+# 100 -> парсить 100 страниц
+# 0   -> парсить весь сайт без ограничений
+# ======================================================
+async def handle_change_crawl_limit(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE
+):
+    context.user_data["cancel_target"] = show_knowledge_base_menu
+
+    settings_path = (
+        Path(__file__).resolve().parent.parent
+        / "parser"
+        / "app"
+        / "config"
+        / "settings.json"
+    )
+
+    with open(
+        settings_path,
+        "r",
+        encoding="utf-8"
+    ) as f:
+        settings = json.load(f)
+
+    current_limit = settings.get(
+        "crawl_limit",
+        4
+    )
+
+    await update.message.reply_text(
+        f"📄 Текущий лимит страниц:\n\n"
+        f"{current_limit}\n\n"
+        f"Введите новый лимит.\n\n"
+        f"0 = весь сайт\n"
+        f"10 = первые 10 страниц\n"
+        f"100 = первые 100 страниц\n\n"
+        f"Для отмены нажмите:\n"
+        f"{btn.BTN_CANCEL}",
+        reply_markup=get_cancel_keyboard()
+    )
+
+    return AWAITING_CRAWL_LIMIT
+
+
 async def handle_check_changes(update, context):
     await update.message.reply_text(
         "🚧 Проверка изменений пока находится в разработке."
@@ -1260,6 +1312,80 @@ async def save_rag_source_url(
 
     return ConversationHandler.END
 
+
+# ======================================================
+# Сохраняет новый лимит страниц для парсера.
+#
+# Пользователь вводит:
+# 10 -> парсим 10 страниц
+# 100 -> парсим 100 страниц
+# 0 -> парсим весь сайт без ограничений
+# ======================================================
+async def save_crawl_limit(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE
+):
+    try:
+        # преобразуем текст пользователя в число
+        new_limit = int(
+            update.message.text.strip()
+        )
+
+        # отрицательные значения запрещаем
+        if new_limit < 0:
+            raise ValueError
+
+    except ValueError:
+
+        await update.message.reply_text(
+            "❌ Введите число больше либо равное нулю."
+        )
+
+        return AWAITING_CRAWL_LIMIT
+
+    # путь к динамическим настройкам parser
+    settings_path = (
+        Path(__file__).resolve().parent.parent
+        / "parser"
+        / "app"
+        / "config"
+        / "settings.json"
+    )
+
+    # читаем текущие настройки
+    with open(
+        settings_path,
+        "r",
+        encoding="utf-8"
+    ) as f:
+        settings = json.load(f)
+
+    # сохраняем новый лимит страниц
+    settings["crawl_limit"] = new_limit
+
+    # записываем изменения обратно в файл
+    with open(
+        settings_path,
+        "w",
+        encoding="utf-8"
+    ) as f:
+        json.dump(
+            settings,
+            f,
+            ensure_ascii=False,
+            indent=4
+        )
+
+    await update.message.reply_text(
+        f"✅ Новый лимит страниц сохранён:\n\n"
+        f"{new_limit}",
+        reply_markup=get_knowledge_base_keyboard()
+    )
+
+    return ConversationHandler.END
+
+    
+
 # ==========================================================
 # РЕГИСТРАЦИЯ ОБРАБОТЧИКОВ АДМИНИСТРАТИВНОЙ ПАНЕЛИ
 # ==========================================================
@@ -1452,6 +1578,37 @@ def get_admin_handlers():
     )
 
     # ======================================================
+    # Изменение лимита страниц для парсера
+    # ======================================================
+    change_crawl_limit_conversation = ConversationHandler(
+        entry_points=[
+            MessageHandler(
+                filters.Text(btn.BTN_CRAWL_LIMIT),
+                handle_change_crawl_limit
+            )
+        ],
+        states={
+            AWAITING_CRAWL_LIMIT: [
+                MessageHandler(
+                    filters.Text(btn.BTN_CANCEL),
+                    cancel_current_action
+                ),
+                MessageHandler(
+                    filters.TEXT & ~filters.COMMAND,
+                    save_crawl_limit
+                ),
+            ]
+        },
+        fallbacks=[
+            MessageHandler(
+                filters.Text(btn.BTN_CANCEL),
+                cancel_current_action
+            )
+        ],
+        allow_reentry=True
+    )
+
+    # ======================================================
     # Общий обработчик кнопок админ-панели
     # ======================================================
     admin_actions_handler = MessageHandler(
@@ -1521,6 +1678,7 @@ def get_admin_handlers():
         admin_add_conversation,
         admin_remove_conversation,
         change_site_conversation,
+        change_crawl_limit_conversation,
 
         # Общие кнопки админки
         admin_actions_handler,
