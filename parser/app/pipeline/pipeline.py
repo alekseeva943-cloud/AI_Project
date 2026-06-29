@@ -12,7 +12,10 @@ import json
 
 from app.parser.crawler import crawl
 from app.parser.extractor import load_all_pages
-from app.config.paths import OUTPUT_DIR
+from app.config.paths import (
+    OUTPUT_DIR,
+    PROGRESS_FILE
+)
 
 from app.processing.cleaner import process_content_block
 from app.processing.deduplicator import Deduplicator
@@ -28,6 +31,40 @@ from app.utils.cost_tracker import CostTracker
 
 
 # =========================
+# 📡 Отправка прогресса в Telegram-бот
+# =========================
+def update_progress(
+        step: str,
+        message: str,
+        progress: int
+):
+    """
+    Сохраняет текущий статус сборки базы знаний.
+
+    Этот файл читает основной Telegram-бот
+    и показывает пользователю ход выполнения.
+    """
+
+    data = {
+        "step": step,
+        "message": message,
+        "progress": progress
+    }
+
+    with open(
+        PROGRESS_FILE,
+        "w",
+        encoding="utf-8"
+    ) as f:
+        json.dump(
+            data,
+            f,
+            ensure_ascii=False,
+            indent=2
+        )
+
+
+# =========================
 # 🚀 PIPELINE
 # =========================
 def run_pipeline(progress_callback=None):
@@ -40,6 +77,11 @@ def run_pipeline(progress_callback=None):
     # =========================
     # 🌐 CRAWLER
     # =========================
+    update_progress(
+        step="crawler",
+        message="🌐 Сканирование сайта...",
+        progress=10
+    )
     logger.info("🌐 Запуск crawler")
     crawl(progress_callback)
 
@@ -49,6 +91,12 @@ def run_pipeline(progress_callback=None):
     if progress_callback:
         progress_callback("📂 Загрузка страниц...")
 
+    update_progress(
+        step="loading",
+        message="📂 Загрузка страниц...",
+        progress=20
+    )
+
     pages = load_all_pages()
 
     if not pages:
@@ -57,6 +105,12 @@ def run_pipeline(progress_callback=None):
     # =========================
     # 🧹 CLEAN
     # =========================
+    update_progress(
+    step="cleaning",
+    message="🧹 Очистка данных...",
+    progress=30
+)
+
     if progress_callback:
         progress_callback("🧹 Очистка данных...")
 
@@ -77,6 +131,12 @@ def run_pipeline(progress_callback=None):
     # =========================
     # 🔁 DEDUP (внутри страницы)
     # =========================
+    update_progress(
+    step="dedup",
+    message="🔁 Удаление дубликатов...",
+    progress=40
+)
+
     if progress_callback:
         progress_callback("🔁 Удаление дубликатов...")
 
@@ -97,6 +157,12 @@ def run_pipeline(progress_callback=None):
     # =========================
     # 🧱 BLOCKS (нормальные)
     # =========================
+    update_progress(
+    step="blocks",
+    message="🧱 Формирование блоков...",
+    progress=50
+)
+
     if progress_callback:
         progress_callback("🧱 Формирование блоков...")
 
@@ -114,6 +180,12 @@ def run_pipeline(progress_callback=None):
     # =========================
     # ✂️ SPLIT
     # =========================
+    update_progress(
+    step="split",
+    message="✂️ Разбиение текста...",
+    progress=60
+)
+
     if progress_callback:
         progress_callback("✂️ Разбиение текста...")
 
@@ -150,6 +222,12 @@ def run_pipeline(progress_callback=None):
 # =========================
 # 📄 TXT (читаемый!)
 # =========================
+    update_progress(
+    step="text",
+    message="📄 Сбор текста базы...",
+    progress=65
+)
+
     if progress_callback:
         progress_callback("📄 Сбор текста базы...")
 
@@ -194,6 +272,12 @@ def run_pipeline(progress_callback=None):
     # =========================
     # 📦 CHUNKS
     # =========================
+    update_progress(
+    step="chunks",
+    message="📦 Создание чанков...",
+    progress=70
+)
+
     if progress_callback:
         progress_callback("📦 Создание чанков...")
 
@@ -231,6 +315,12 @@ def run_pipeline(progress_callback=None):
     # =========================
     # 🧠 EMBEDDINGS
     # =========================
+    update_progress(
+    step="embeddings",
+    message="🧠 Создание embeddings...",
+    progress=85
+)
+
     if progress_callback:
         progress_callback("🧠 Создание embeddings...")
 
@@ -264,6 +354,12 @@ def run_pipeline(progress_callback=None):
     # =========================
     # 📦 VECTOR STORE
     # =========================
+    update_progress(
+    step="saving",
+    message="📦 Сохранение базы...",
+    progress=95
+)
+
     if progress_callback:
         progress_callback("📦 Сохранение базы...")
 
@@ -275,6 +371,12 @@ def run_pipeline(progress_callback=None):
     # =========================
     # ✅ DONE
     # =========================
+    update_progress(
+    step="done",
+    message="✅ Сборка завершена!",
+    progress=100
+)
+
     if progress_callback:
         progress_callback("✅ Готово!")
 

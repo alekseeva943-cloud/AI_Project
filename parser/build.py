@@ -20,17 +20,31 @@ from app.pipeline.pipeline import run_pipeline
 
 
 def main():
-    print("🚀 Запуск сборки базы знаний...\n")
+    print("Запуск сборки базы знаний...\n")
 
     stats = run_pipeline()
 
-    print("\n✅ Сборка успешно завершена")
-    print(f"📄 Страниц: {stats['pages']}")
-    print(f"🧱 Блоков: {stats['blocks']}")
-    print(f"📦 Чанков: {stats['chunks']}")
-    print(f"🧠 Токенов: {stats['tokens']}")
-    print(f"💵 Стоимость: ${stats['usd']:.4f}")
-    print(f"💰 Стоимость: {stats['rub']:.2f} ₽")
+    import json
+
+    with open(
+        "output/build_stats.json",
+        "w",
+        encoding="utf-8"
+    ) as f:
+        json.dump(
+            stats,
+            f,
+            ensure_ascii=False,
+            indent=2
+        )
+
+    print("\nСборка успешно завершена")
+    print(f"Страниц: {stats['pages']}")
+    print(f"Блоков: {stats['blocks']}")
+    print(f"Чанков: {stats['chunks']}")
+    print(f"Токенов: {stats['tokens']}")
+    print(f"Стоимость USD: ${stats['usd']:.4f}")
+    print(f"Стоимость RUB: {stats['rub']:.2f} RUB")
 
 
 if __name__ == "__main__":

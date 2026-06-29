@@ -14,6 +14,7 @@ import os
 import asyncio
 import re
 from typing import List
+from unittest import result
 from config.keyboards import (
     get_cancel_keyboard,
     get_confirm_keyboard
@@ -841,10 +842,153 @@ async def handle_check_changes(update, context):
     )
 
 
-async def handle_build_new_base(update, context):
-    await update.message.reply_text(
-        "🚧 Сборка новой базы пока находится в разработке."
+# ======================================================
+# Сборка новой базы знаний через parser/build.py
+# ======================================================
+async def handle_build_new_base(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE
+):
+    """
+    Собирает новую базу знаний через parser/build.py.
+
+    Важно:
+    База собирается в parser/output
+    и не становится активной автоматически.
+    """
+
+    import asyncio
+    import json
+    from pathlib import Path
+
+    progress_message = await update.message.reply_text(
+        "🏗 Начинаю сборку новой базы знаний...\n\n"
+        "⏳ Подготавливаю parser..."
     )
+
+    try:
+
+        parser_dir = (
+            Path(__file__).resolve().parent.parent
+            / "parser"
+        )
+
+        output_dir = parser_dir / "output"
+
+        progress_file = output_dir / "progress.json"
+        stats_file = output_dir / "build_stats.json"
+
+        # очищаем старые файлы предыдущего запуска
+        if progress_file.exists():
+            progress_file.unlink()
+
+        if stats_file.exists():
+            stats_file.unlink()
+
+        last_step = None
+
+        process = await asyncio.create_subprocess_exec(
+            "uv",
+            "run",
+            "build.py",
+            cwd=str(parser_dir),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+
+        # пока parser работает
+        while True:
+
+            # процесс завершился
+            if process.returncode is not None:
+                break
+
+            # появился новый статус
+            if progress_file.exists():
+
+                try:
+
+                    with open(
+                        progress_file,
+                        "r",
+                        encoding="utf-8"
+                    ) as f:
+                        progress_data = json.load(f)
+
+                    current_step = progress_data.get("step")
+
+                    if current_step != last_step:
+
+                        await progress_message.edit_text(
+                            "🏗 Сборка базы знаний\n\n"
+                            f"{progress_data.get('progress', 0)}%\n\n"
+                            f"{progress_data.get('message', 'Работаю...')}"
+                        )
+
+                        last_step = current_step
+
+                except Exception:
+                    pass
+
+            await asyncio.sleep(2)
+
+            if process.returncode is not None:
+              break
+
+
+        stdout, stderr = await process.communicate()
+
+        # успешно завершилось
+        if process.returncode == 0:
+
+            stats = {}
+
+            if stats_file.exists():
+
+                with open(
+                    stats_file,
+                    "r",
+                    encoding="utf-8"
+                ) as f:
+                    stats = json.load(f)
+
+            await progress_message.edit_text(
+                "✅ Новая база успешно собрана.\n\n"
+
+                f"📄 Страниц: {stats.get('pages', 0)}\n"
+                f"🧱 Блоков: {stats.get('blocks', 0)}\n"
+                f"📦 Чанков: {stats.get('chunks', 0)}\n"
+                f"🧠 Токенов: {stats.get('tokens', 0)}\n\n"
+
+                f"💵 Стоимость:\n"
+                f"USD: ${stats.get('usd', 0):.4f}\n"
+                f"RUB: {stats.get('rub', 0):.2f} ₽\n\n"
+
+                "📂 База сохранена в:\n"
+                "parser/output/\n\n"
+
+                "🟡 База собрана, но пока не активирована.\n\n"
+
+                "Для применения используйте:\n"
+                "🔄 Активировать новую базу"
+            )
+
+        else:
+
+            stderr_text = stderr.decode(
+                errors="ignore"
+            ) if stderr else "Неизвестная ошибка"
+
+            await progress_message.edit_text(
+                "❌ Ошибка сборки базы.\n\n"
+                f"{stderr_text[-3000:]}"
+            )
+
+    except Exception as e:
+
+        await progress_message.edit_text(
+            f"❌ Ошибка запуска сборки:\n\n{e}"
+        )
 
 
 # ======================================================
@@ -865,15 +1009,32 @@ async def handle_activate_new_base(
     success = activate_new_base()
 
     if success:
-        await update.message.reply_text(
-            "✅ Новая база успешно активирована.\n\n"
-            "📦 Предыдущая версия сохранена в резервной копии."
+
+        # --------------------------------------------------
+        # Перезагружаем индекс RAG в памяти бота
+        # --------------------------------------------------
+        from services.rag_service import (
+            reload_rag_index
         )
-    else:
-        await update.message.reply_text(
-            "❌ Не удалось активировать новую базу.\n\n"
-            "Проверьте логи сервера."
-        )
+
+        reload_success = reload_rag_index()
+
+        if reload_success:
+
+            await update.message.reply_text(
+                "✅ Новая база успешно активирована.\n\n"
+                "♻️ RAG индекс успешно перезагружен.\n"
+                "📦 Предыдущая версия сохранена в резервной копии."
+            )
+
+        else:
+
+            await update.message.reply_text(
+                "⚠️ Новая база скопирована на диск,\n"
+                "но не удалось перезагрузить RAG индекс.\n\n"
+                "Рекомендуется перезапустить бота "
+                "или выполнить откат базы."
+            )
 
 
 async def handle_knowledge_status(update, context):
@@ -884,13 +1045,47 @@ async def handle_knowledge_status(update, context):
 # ======================================================
 # Откат базы знаний на предыдущую рабочую версию
 # ======================================================
+
+
 async def handle_backup_restore(
         update: Update,
         context: ContextTypes.DEFAULT_TYPE
 ):
-    await update.message.reply_text(
-        "⏪ Функция восстановления резервной копии пока не реализована."
+    """
+    Выполняет откат активной базы знаний
+    на предыдущую рабочую версию.
+
+    Источник восстановления:
+
+    backup/
+        ↓
+    data/
+    """
+
+    from services.knowledge_base_manager import (
+        rollback_to_backup
     )
+
+    await update.message.reply_text(
+        "⏪ Начинаю восстановление предыдущей базы..."
+    )
+
+    success = rollback_to_backup()
+
+    if success:
+
+        await update.message.reply_text(
+            "✅ Предыдущая версия базы успешно восстановлена.\n\n"
+            "♻️ Для применения изменений потребуется "
+            "перезагрузка RAG индекса."
+        )
+
+    else:
+
+        await update.message.reply_text(
+            "❌ Не удалось восстановить резервную копию.\n\n"
+            "Проверьте логи сервера."
+        )
 
 
 async def save_rag_source_url(

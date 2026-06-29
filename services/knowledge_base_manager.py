@@ -105,6 +105,76 @@ def create_backup() -> bool:
     
 
 # ==========================================================
+# Откатывает базу знаний на предыдущую рабочую версию
+# ==========================================================
+def rollback_to_backup() -> bool:
+    """
+    Восстанавливает предыдущую рабочую базу знаний
+    из резервной копии.
+
+    Используется в двух случаях:
+
+    1. Администратор нажал кнопку:
+       "⏪ Откатить предыдущую базу"
+
+    2. Автоматический откат после неудачной
+       активации новой базы.
+
+    Алгоритм:
+
+    backup/
+        ↓
+    data/
+
+    Возвращает:
+        True  - успех
+        False - ошибка
+    """
+
+    try:
+
+        files_to_restore = [
+            "faiss.index",
+            "metadata.json"
+        ]
+
+        # гарантируем существование data/
+        DATA_DIR.mkdir(
+            parents=True,
+            exist_ok=True
+        )
+
+        for filename in files_to_restore:
+
+            source = BACKUP_DIR / filename
+
+            if not source.exists():
+                raise FileNotFoundError(
+                    f"Файл резервной копии не найден: {source}"
+                )
+
+            destination = DATA_DIR / filename
+
+            shutil.copy2(
+                source,
+                destination
+            )
+
+        logger.info(
+            "✅ Выполнен откат на предыдущую базу"
+        )
+
+        return True
+
+    except Exception as e:
+
+        logger.exception(
+            f"Ошибка rollback базы: {e}"
+        )
+
+        return False
+
+# ==========================================================
 # Активирует новую базу знаний
 # ==========================================================
 def activate_new_base() -> bool:
