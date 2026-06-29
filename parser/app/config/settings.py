@@ -26,6 +26,20 @@ from app.config.paths import (
     OUTPUT_DIR,
     CACHE_DIR
 )
+
+import json
+from pathlib import Path
+
+SETTINGS_JSON = (
+    Path(__file__).parent / "settings.json"
+)
+
+with open(
+    SETTINGS_JSON,
+    "r",
+    encoding="utf-8"
+) as f:
+    DYNAMIC_SETTINGS = json.load(f)
 # =========================
 # 🎛 UI / КНОПКИ
 # =========================
@@ -54,10 +68,11 @@ USD_TO_RUB = 82
 # =========================
 
 # Базовый URL сайта, с которого начинается обход
-BASE_URL = "https://professional24.ru"
+BASE_URL = DYNAMIC_SETTINGS["base_url"]
+
 
 # Максимальное количество страниц для обхода (ограничение crawler)
-CRAWL_LIMIT = 4
+CRAWL_LIMIT = DYNAMIC_SETTINGS["crawl_limit"]
 
 # Таймаут HTTP-запроса (в секундах)
 # Если сайт не отвечает дольше — запрос будет прерван

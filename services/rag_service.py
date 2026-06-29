@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 
 import faiss
 import numpy as np
@@ -19,7 +20,9 @@ MAX_DISTANCE = 2.0
 
 INDEX_PATH = "data/faiss.index"
 METADATA_PATH = "data/metadata.json"
+CHUNKS_PATH = "data/chunks_final.json"
 
+chunks_data = None
 index = None
 metadata = None
 
@@ -40,6 +43,20 @@ def load_rag_index():
         encoding="utf-8"
     ) as f:
         metadata = json.load(f)
+
+    global chunks_data
+
+    if os.path.exists(CHUNKS_PATH):
+
+        with open(
+            CHUNKS_PATH,
+            "r",
+            encoding="utf-8"
+        ) as f:
+            chunks_data = json.load(f)
+
+    else:
+        chunks_data = []
 
 
 def reload_rag_index():
@@ -115,7 +132,11 @@ def retrieve_context(query: str):
             continue
         if dist > MAX_DISTANCE:
             continue
-        chunks.append(metadata[i]["content"])
+        chunk_index = metadata[i]["chunk_index"]
+
+        chunks.append(
+            chunks_data[chunk_index]["content"]
+        )
 
     return "\n\n".join(chunks) if chunks else None
 

@@ -24,6 +24,12 @@ def main():
 
     stats = run_pipeline()
 
+    from datetime import datetime
+
+    stats["created_at"] = datetime.now().strftime(
+        "%d.%m.%Y %H:%M:%S"
+    )
+
     import json
 
     with open(

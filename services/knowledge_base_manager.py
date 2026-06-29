@@ -25,6 +25,7 @@ Parser никогда не пишет напрямую в data.
 Основной бот никогда не пишет в parser/output.
 """
 
+import json
 from pathlib import Path
 import shutil
 import logging
@@ -72,7 +73,9 @@ def create_backup() -> bool:
 
         files_to_backup = [
             "faiss.index",
-            "metadata.json"
+            "metadata.json",
+            "build_stats.json",
+            "chunks_final.json"
         ]
 
         for filename in files_to_backup:
@@ -102,7 +105,7 @@ def create_backup() -> bool:
         )
 
         return False
-    
+
 
 # ==========================================================
 # Откатывает базу знаний на предыдущую рабочую версию
@@ -135,7 +138,9 @@ def rollback_to_backup() -> bool:
 
         files_to_restore = [
             "faiss.index",
-            "metadata.json"
+            "metadata.json",
+            "build_stats.json",
+            "chunks_final.json"
         ]
 
         # гарантируем существование data/
@@ -149,6 +154,11 @@ def rollback_to_backup() -> bool:
             source = BACKUP_DIR / filename
 
             if not source.exists():
+
+                # build_stats.json не является обязательным
+                if filename == "build_stats.json":
+                    continue
+
                 raise FileNotFoundError(
                     f"Файл резервной копии не найден: {source}"
                 )
@@ -177,6 +187,8 @@ def rollback_to_backup() -> bool:
 # ==========================================================
 # Активирует новую базу знаний
 # ==========================================================
+
+
 def activate_new_base() -> bool:
     """
     Активирует новую базу знаний.
@@ -210,7 +222,9 @@ def activate_new_base() -> bool:
         # ----------------------------------------------
         files_to_activate = [
             "faiss.index",
-            "metadata.json"
+            "metadata.json",
+            "build_stats.json",
+            "chunks_final.json"
         ]
 
         # гарантируем существование data/
@@ -251,3 +265,90 @@ def activate_new_base() -> bool:
         )
 
         return False
+
+
+# ==========================================================
+# Возвращает статус системы баз знаний
+# ==========================================================
+def get_knowledge_base_status() -> dict:
+    """
+    Собирает информацию обо всех версиях базы знаний.
+
+    Проверяет:
+
+    - активную рабочую базу;
+    - новую собранную базу;
+    - резервную копию.
+
+    Используется кнопкой:
+    📊 Статус базы
+    """
+
+    status = {}
+
+    try:
+
+        # ==================================================
+        # Активная база
+        # ==================================================
+        active_stats_file = (
+            DATA_DIR
+            / "build_stats.json"
+        )
+
+        status["active"] = None
+
+        if active_stats_file.exists():
+
+            with open(
+                active_stats_file,
+                "r",
+                encoding="utf-8"
+            ) as f:
+                status["active"] = json.load(f)
+
+        # ==================================================
+        # Новая собранная база
+        # ==================================================
+        new_stats_file = (
+            PARSER_OUTPUT_DIR
+            / "build_stats.json"
+        )
+
+        status["new"] = None
+
+        if new_stats_file.exists():
+
+            with open(
+                new_stats_file,
+                "r",
+                encoding="utf-8"
+            ) as f:
+                status["new"] = json.load(f)
+
+        # ==================================================
+        # Backup
+        # ==================================================
+        backup_stats_file = (
+            BACKUP_DIR
+            / "build_stats.json"
+        )
+
+        status["backup"] = None
+
+        if backup_stats_file.exists():
+
+            with open(
+                backup_stats_file,
+                "r",
+                encoding="utf-8"
+            ) as f:
+                status["backup"] = json.load(f)
+
+    except Exception as e:
+
+        logger.exception(
+            f"Ошибка получения статуса базы: {e}"
+        )
+
+    return status

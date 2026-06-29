@@ -15,6 +15,8 @@ import asyncio
 import re
 from typing import List
 from unittest import result
+import json
+from pathlib import Path
 from config.keyboards import (
     get_cancel_keyboard,
     get_confirm_keyboard
@@ -818,8 +820,23 @@ async def handle_change_site(
         context: ContextTypes.DEFAULT_TYPE
 ):
     context.user_data["cancel_target"] = show_knowledge_base_menu
-    current_url = os.getenv(
-        "RAG_SOURCE_URL",
+    settings_path = (
+        Path(__file__).resolve().parent.parent
+        / "parser"
+        / "app"
+        / "config"
+        / "settings.json"
+    )
+
+    with open(
+        settings_path,
+        "r",
+        encoding="utf-8"
+    ) as f:
+        settings = json.load(f)
+
+    current_url = settings.get(
+        "base_url",
         "Не настроен"
     )
 
@@ -887,11 +904,23 @@ async def handle_build_new_base(
 
         last_step = None
 
+        current_url = context.bot_data.get(
+            "rag_source_url",
+            os.getenv(
+                "RAG_SOURCE_URL",
+                "https://professional24.ru"
+            )
+        )
+
+        env = os.environ.copy()
+        env["RAG_SOURCE_URL"] = current_url
+
         process = await asyncio.create_subprocess_exec(
             "uv",
             "run",
             "build.py",
             cwd=str(parser_dir),
+            env=env,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
@@ -933,8 +962,7 @@ async def handle_build_new_base(
             await asyncio.sleep(2)
 
             if process.returncode is not None:
-              break
-
+                break
 
         stdout, stderr = await process.communicate()
 
@@ -1037,16 +1065,96 @@ async def handle_activate_new_base(
             )
 
 
-async def handle_knowledge_status(update, context):
-    await update.message.reply_text(
-        "🚧 Статус базы пока находится в разработке."
+async def handle_knowledge_status(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE
+):
+    """
+    Показывает состояние всех баз знаний.
+    """
+
+    from services.knowledge_base_manager import (
+        get_knowledge_base_status
     )
+
+    status = get_knowledge_base_status()
+
+    text = "📊 Статус базы знаний\n\n"
+
+    # ==========================================
+    # Активная база
+    # ==========================================
+    if status.get("active"):
+
+        active = status["active"]
+
+        text += (
+            "🟢 Активная база\n"
+            f"📄 Страниц: {active.get('pages', 0)}\n"
+            f"📦 Чанков: {active.get('chunks', 0)}\n"
+            f"🧠 Токенов: {active.get('tokens', 0)}\n"
+            f"🕒 Активирована: "
+            f"{active.get('created_at', 'неизвестно')}\n\n"
+        )
+
+    else:
+
+        text += (
+            "🔴 Активная база отсутствует\n\n"
+        )
+
+    # ==========================================
+    # Новая база
+    # ==========================================
+    if status.get("new"):
+
+        new = status["new"]
+
+        text += (
+            "🟡 Новая собранная база\n"
+            f"📄 Страниц: {new.get('pages', 0)}\n"
+            f"📦 Чанков: {new.get('chunks', 0)}\n"
+            f"🧠 Токенов: {new.get('tokens', 0)}\n"
+            f"🕒 Собрана: "
+            f"{new.get('created_at', 'неизвестно')}\n"
+            f"Статус: ожидает активации\n\n"
+        )
+
+    else:
+
+        text += (
+            "⚪ Новая база отсутствует\n\n"
+        )
+
+    # ==========================================
+    # Backup
+    # ==========================================
+    if status.get("backup"):
+
+        backup = status["backup"]
+
+        text += (
+            "💾 Резервная копия\n"
+            f"📄 Страниц: {backup.get('pages', 0)}\n"
+            f"📦 Чанков: {backup.get('chunks', 0)}\n"
+            f"🧠 Токенов: {backup.get('tokens', 0)}\n"
+            f"🕒 Создана: "
+            f"{backup.get('created_at', 'неизвестно')}\n"
+            f"Статус: готова к откату"
+        )
+
+    else:
+
+        text += (
+            "💾 Резервная копия отсутствует"
+        )
+
+    await update.message.reply_text(text)
+
 
 # ======================================================
 # Откат базы знаний на предыдущую рабочую версию
 # ======================================================
-
-
 async def handle_backup_restore(
         update: Update,
         context: ContextTypes.DEFAULT_TYPE
@@ -1055,15 +1163,16 @@ async def handle_backup_restore(
     Выполняет откат активной базы знаний
     на предыдущую рабочую версию.
 
-    Источник восстановления:
-
-    backup/
-        ↓
-    data/
+    После восстановления автоматически
+    выполняется reload RAG индекса.
     """
 
     from services.knowledge_base_manager import (
         rollback_to_backup
+    )
+
+    from services.rag_service import (
+        reload_rag_index
     )
 
     await update.message.reply_text(
@@ -1072,19 +1181,33 @@ async def handle_backup_restore(
 
     success = rollback_to_backup()
 
-    if success:
+    if not success:
+
+        await update.message.reply_text(
+            "❌ Не удалось восстановить резервную копию.\n\n"
+            "Проверьте логи сервера."
+        )
+
+        return
+
+    # -----------------------------------------
+    # Перезагрузка FAISS после отката
+    # -----------------------------------------
+    reload_success = reload_rag_index()
+
+    if reload_success:
 
         await update.message.reply_text(
             "✅ Предыдущая версия базы успешно восстановлена.\n\n"
-            "♻️ Для применения изменений потребуется "
-            "перезагрузка RAG индекса."
+            "♻️ RAG индекс успешно перезагружен."
         )
 
     else:
 
         await update.message.reply_text(
-            "❌ Не удалось восстановить резервную копию.\n\n"
-            "Проверьте логи сервера."
+            "⚠️ База восстановлена, "
+            "но возникла ошибка перезагрузки RAG индекса.\n\n"
+            "Рекомендуется перезапустить бота."
         )
 
 
@@ -1094,8 +1217,40 @@ async def save_rag_source_url(
 ):
     new_url = update.message.text.strip()
 
+    if not new_url.startswith(("http://", "https://")):
+     new_url = "https://" + new_url
+
     # пока просто сохраняем в память бота
     context.bot_data["rag_source_url"] = new_url
+
+    settings_path = (
+        Path(__file__).resolve().parent.parent
+        / "parser"
+        / "app"
+        / "config"
+        / "settings.json"
+    )
+
+    with open(
+        settings_path,
+        "r",
+        encoding="utf-8"
+    ) as f:
+        settings = json.load(f)
+
+    settings["base_url"] = new_url
+
+    with open(
+        settings_path,
+        "w",
+        encoding="utf-8"
+    ) as f:
+        json.dump(
+            settings,
+            f,
+            ensure_ascii=False,
+            indent=4
+        )
 
     await update.message.reply_text(
         f"✅ Новый источник знаний сохранён:\n\n"
