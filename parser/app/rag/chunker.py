@@ -50,13 +50,26 @@ class Chunker:
             # 🚨 БОЛЬШОЙ БЛОК
             # =========================
             if tokens > MAX_TOKENS:
-                chunks.append({
-                    "content": text,
-                    "tokens": tokens,
-                    "type": block.get("type"),
-                    "title": block.get("title"),
-                    "url": block.get("url"),
-                })
+
+                token_list = self.tokenizer.encode(text)
+
+                step = MAX_TOKENS - 100
+
+                for i in range(0, len(token_list), step):
+
+                    part_tokens = token_list[i:i + MAX_TOKENS]
+
+                    if not part_tokens:
+                        continue
+
+                    chunks.append({
+                        "content": self.tokenizer.decode(part_tokens),
+                        "tokens": len(part_tokens),
+                        "type": block.get("type"),
+                        "title": block.get("title"),
+                        "url": block.get("url"),
+                    })
+
                 continue
 
             # =========================

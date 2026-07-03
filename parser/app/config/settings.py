@@ -131,6 +131,9 @@ MAX_TEXT_LENGTH = 500
 # Если превышает — создаётся новый chunk
 MAX_TOKENS = 750
 
+# Перекрытие чанков
+CHUNK_OVERLAP = 100
+
 # Модель для токенизации (должна совпадать с GPT)
 TOKENIZER_MODEL = "gpt-4o-mini"
 
