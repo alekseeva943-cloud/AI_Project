@@ -56,12 +56,13 @@ from config.buttons import (
     BTN_BUILD_NEW_BASE,
     BTN_ACTIVATE_NEW_BASE,
     BTN_KNOWLEDGE_STATUS
-    )
+)
 
 # ==========================================================
 # Главное меню администратора.
 # Используется при входе в админ-панель.
 # ==========================================================
+
 
 def get_admin_keyboard():
     return ReplyKeyboardMarkup(
@@ -171,18 +172,18 @@ def get_broadcast_confirm_keyboard():
 # Позволяет полностью управлять RAG через Telegram.
 # ==========================================================
 
+
 def get_knowledge_base_keyboard():
     return ReplyKeyboardMarkup(
         keyboard=[
 
-            # Основной рабочий цикл
-            [BTN_CHECK_CHANGES, BTN_BUILD_NEW_BASE],
-            [BTN_ACTIVATE_NEW_BASE, BTN_BACKUP],
+            # Основные действия
+            [BTN_BUILD_NEW_BASE, BTN_ACTIVATE_NEW_BASE],
 
-            # Информация о состоянии
-            [BTN_KNOWLEDGE_STATUS],
+            # Управление версиями
+            [BTN_BACKUP, BTN_KNOWLEDGE_STATUS],
 
-            # Настройки источника и парсинга
+            # Настройки
             [BTN_CHANGE_SITE, BTN_CRAWL_LIMIT],
 
             # Навигация

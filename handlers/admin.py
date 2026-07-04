@@ -84,6 +84,9 @@ AWAITING_RAG_SOURCE_URL = 30
 # Состояние кол-ва страниц для парсера
 AWAITING_CRAWL_LIMIT = 1002
 
+# Ожидание подтверждения запуска сборки базы
+AWAITING_BUILD_CONFIRMATION = 1003
+
 
 # ==========================================================
 # НАСТРОЙКИ ИНТЕРФЕЙСА
@@ -890,9 +893,15 @@ async def handle_change_crawl_limit(
         4
     )
 
+    display_limit = (
+        "Все страницы"
+        if current_limit == 0
+        else str(current_limit)
+    )
+
     await update.message.reply_text(
         f"📄 Текущий лимит страниц:\n\n"
-        f"{current_limit}\n\n"
+        f"{display_limit}\n\n"
         f"Введите новый лимит.\n\n"
         f"0 = весь сайт\n"
         f"10 = первые 10 страниц\n"
@@ -903,6 +912,96 @@ async def handle_change_crawl_limit(
     )
 
     return AWAITING_CRAWL_LIMIT
+
+
+# ======================================================
+# Запрашивает подтверждение перед запуском сборки базы.
+#
+# Нужно чтобы случайное нажатие кнопки не запускало
+# дорогой и долгий процесс парсинга.
+# ======================================================
+async def handle_build_new_base(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE
+):
+
+    # При отмене возвращаемся в меню базы знаний
+    context.user_data["cancel_target"] = (
+        show_knowledge_base_menu
+    )
+
+    settings_path = (
+        Path(__file__).resolve().parent.parent
+        / "parser"
+        / "app"
+        / "config"
+        / "settings.json"
+    )
+
+    with open(
+        settings_path,
+        "r",
+        encoding="utf-8"
+    ) as f:
+        settings = json.load(f)
+
+    current_site = settings.get(
+        "base_url",
+        "Не указан"
+    )
+
+    current_limit = settings.get(
+        "crawl_limit",
+        4
+    )
+
+    # Для пользователя отображаем понятное значение
+    display_limit = (
+        "Все страницы"
+        if current_limit == 0
+        else str(current_limit)
+    )
+
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [btn.BTN_CONFIRM_BUILD],
+            [btn.BTN_CANCEL]
+        ],
+        resize_keyboard=True
+    )
+
+    await update.message.reply_text(
+        "⚠️ Вы собираетесь начать сборку новой базы знаний.\n\n"
+
+        f"🌐 Сайт:\n"
+        f"{current_site}\n\n"
+
+        f"📄 Лимит страниц:\n"
+        f"{display_limit}\n\n"
+
+        "Процесс может занять длительное время "
+        "и использовать токены OpenAI.\n\n"
+
+        "Продолжить?",
+        reply_markup=keyboard
+    )
+
+    return AWAITING_BUILD_CONFIRMATION
+
+
+# ======================================================
+# Пользователь подтвердил запуск сборки базы.
+# ======================================================
+async def confirm_build_new_base(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE
+):
+    await start_build_new_base(
+        update,
+        context
+    )
+
+    return ConversationHandler.END
 
 
 # ======================================================
@@ -945,7 +1044,7 @@ async def handle_check_changes(
             f"🧠 Токенов: {stats.get('tokens', 0)}\n"
             f"💰 USD: {stats.get('usd', 0):.4f}\n"
         )
-    
+
     message = (
         "🔍 СРАВНЕНИЕ БАЗ ЗНАНИЙ\n\n"
         f"{format_block('Активная база', active)}\n"
@@ -959,8 +1058,11 @@ async def handle_check_changes(
 
 # ======================================================
 # Сборка новой базы знаний через parser/build.py
+# Вызывается только после подтверждения пользователя
 # ======================================================
-async def handle_build_new_base(
+
+
+async def start_build_new_base(
         update: Update,
         context: ContextTypes.DEFAULT_TYPE
 ):
@@ -1309,9 +1411,6 @@ async def handle_backup_restore(
         )
 
 
-
-
-
 async def save_rag_source_url(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
@@ -1319,7 +1418,7 @@ async def save_rag_source_url(
     new_url = update.message.text.strip()
 
     if not new_url.startswith(("http://", "https://")):
-     new_url = "https://" + new_url
+        new_url = "https://" + new_url
 
     # пока просто сохраняем в память бота
     context.bot_data["rag_source_url"] = new_url
@@ -1425,15 +1524,21 @@ async def save_crawl_limit(
             indent=4
         )
 
+    # Для пользователя показываем более понятное значение
+    display_limit = (
+        "Все страницы"
+        if new_limit == 0
+        else str(new_limit)
+    )
+
     await update.message.reply_text(
         f"✅ Новый лимит страниц сохранён:\n\n"
-        f"{new_limit}",
+        f"{display_limit}",
         reply_markup=get_knowledge_base_keyboard()
     )
 
     return ConversationHandler.END
 
-    
 
 # ==========================================================
 # РЕГИСТРАЦИЯ ОБРАБОТЧИКОВ АДМИНИСТРАТИВНОЙ ПАНЕЛИ
@@ -1627,6 +1732,39 @@ def get_admin_handlers():
     )
 
     # ======================================================
+    # Подтверждение запуска сборки базы знаний
+    # ======================================================
+    build_confirm_conversation = ConversationHandler(
+        entry_points=[
+            MessageHandler(
+                filters.Text(btn.BTN_BUILD_NEW_BASE),
+                handle_build_new_base
+            )
+        ],
+        states={
+            AWAITING_BUILD_CONFIRMATION: [
+
+                MessageHandler(
+                    filters.Text(btn.BTN_CONFIRM_BUILD),
+                    confirm_build_new_base
+                ),
+
+                MessageHandler(
+                    filters.Text(btn.BTN_CANCEL),
+                    cancel_current_action
+                )
+            ]
+        },
+        fallbacks=[
+            MessageHandler(
+                filters.Text(btn.BTN_CANCEL),
+                cancel_current_action
+            )
+        ],
+        allow_reentry=True
+    )
+
+    # ======================================================
     # Изменение лимита страниц для парсера
     # ======================================================
     change_crawl_limit_conversation = ConversationHandler(
@@ -1728,6 +1866,7 @@ def get_admin_handlers():
         admin_remove_conversation,
         change_site_conversation,
         change_crawl_limit_conversation,
+        build_confirm_conversation,
 
         # Общие кнопки админки
         admin_actions_handler,
@@ -1754,11 +1893,6 @@ def get_admin_handlers():
         MessageHandler(
             filters.Text(btn.BTN_CHECK_CHANGES),
             handle_check_changes
-        ),
-
-        MessageHandler(
-            filters.Text(btn.BTN_BUILD_NEW_BASE),
-            handle_build_new_base
         ),
 
         MessageHandler(
