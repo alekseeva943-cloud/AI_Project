@@ -162,7 +162,11 @@ def crawl(progress_callback=None) -> list:
 
     logger.info("🚀 Начало обхода сайта")
 
-    while to_visit and page_count < CRAWL_LIMIT:
+    # 0 означает полный обход сайта без ограничений
+    while to_visit and (
+            CRAWL_LIMIT == 0
+            or page_count < CRAWL_LIMIT
+    ):
 
         url = normalize_url(to_visit.pop())
 
