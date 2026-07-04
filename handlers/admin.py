@@ -905,11 +905,57 @@ async def handle_change_crawl_limit(
     return AWAITING_CRAWL_LIMIT
 
 
-async def handle_check_changes(update, context):
-    await update.message.reply_text(
-        "🚧 Проверка изменений пока находится в разработке."
+# ======================================================
+# 🔍 Проверка изменений между версиями базы знаний
+# ======================================================
+async def handle_check_changes(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE
+):
+    import json
+    from pathlib import Path
+
+    def load_stats(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except:
+            return {}
+
+    # ======================
+    # пути к базам
+    # ======================
+    active_stats_path = Path("data/build_stats.json")
+    new_stats_path = Path("parser/output/build_stats.json")
+    backup_stats_path = Path("backup/build_stats.json")
+
+    active = load_stats(active_stats_path)
+    new = load_stats(new_stats_path)
+    backup = load_stats(backup_stats_path)
+
+    # ======================
+    # сравнение
+    # ======================
+    def format_block(name, stats):
+        return (
+            f"📦 {name}\n"
+            f"📄 Страниц: {stats.get('pages', 0)}\n"
+            f"🧱 Блоков: {stats.get('blocks', 0)}\n"
+            f"📦 Чанков: {stats.get('chunks', 0)}\n"
+            f"🧠 Токенов: {stats.get('tokens', 0)}\n"
+            f"💰 USD: {stats.get('usd', 0):.4f}\n"
+        )
+    
+    message = (
+        "🔍 СРАВНЕНИЕ БАЗ ЗНАНИЙ\n\n"
+        f"{format_block('Активная база', active)}\n"
+        f"{format_block('Новая база', new)}\n"
+        f"{format_block('Резервная копия', backup)}\n"
     )
 
+    await update.message.reply_text(message)
+
+    return
 
 # ======================================================
 # Сборка новой базы знаний через parser/build.py
@@ -1261,6 +1307,9 @@ async def handle_backup_restore(
             "но возникла ошибка перезагрузки RAG индекса.\n\n"
             "Рекомендуется перезапустить бота."
         )
+
+
+
 
 
 async def save_rag_source_url(
