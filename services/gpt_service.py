@@ -1,6 +1,7 @@
 # gpt_service.py
 
 import os
+from venv import logger
 from openai import OpenAI
 from config.config import OPENAI_API_KEY
 
@@ -33,18 +34,33 @@ TASK_PROMPT = load_prompt("task_prompt.txt")
 # 🔹 GPT ГЕНЕРАЦИЯ
 # =======================
 
-def generate_answer(query: str, history: list = None, context: str = None):
+def generate_answer(
+        query: str,
+        history: list = None,
+        context: str = None
+):
+
+    logger.info("GPT REQUEST START")
 
     # 🔥 формируем task_prompt
     if context:
-        final_task_prompt = f"{TASK_PROMPT}\n\nКонтекст:\n{context}"
+        final_task_prompt = (
+            f"{TASK_PROMPT}\n\n"
+            f"Контекст:\n{context}"
+        )
     else:
         final_task_prompt = TASK_PROMPT
 
     # 🔥 сообщения
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "system", "content": final_task_prompt}
+        {
+            "role": "system",
+            "content": SYSTEM_PROMPT
+        },
+        {
+            "role": "system",
+            "content": final_task_prompt
+        }
     ]
 
     # 🔥 история
@@ -52,13 +68,37 @@ def generate_answer(query: str, history: list = None, context: str = None):
         messages.extend(history[-8:])
 
     # 🔥 текущий запрос
-    messages.append({"role": "user", "content": query})
+    messages.append({
+        "role": "user",
+        "content": query
+    })
 
-    # 🔥 запрос к GPT
-    response = client.chat.completions.create(
-        model=MODEL,
-        messages=messages,
-        temperature=0.7
-    )
+    try:
 
-    return response.choices[0].message.content.strip()
+        response = client.chat.completions.create(
+            model=MODEL,
+            messages=messages,
+            temperature=0.7,
+            timeout=60
+        )
+
+        answer = (
+            response
+            .choices[0]
+            .message
+            .content
+            .strip()
+        )
+
+        logger.info("GPT REQUEST SUCCESS")
+
+        return answer
+
+    except Exception as e:
+
+        logger.error(
+            f"GPT REQUEST ERROR: {e}",
+            exc_info=True
+        )
+
+        raise

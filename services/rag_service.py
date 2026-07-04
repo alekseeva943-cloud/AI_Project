@@ -123,7 +123,31 @@ def retrieve_context(query: str):
 
     vector = get_embedding(query).reshape(1, -1)
 
-    distances, indices = index.search(vector, TOP_K)
+    # ======================================================
+    # Для вопросов про полный список услуг расширяем поиск.
+    # Иначе GPT видит только часть базы знаний.
+    # ======================================================
+
+    top_k = TOP_K
+
+    service_queries = [
+        "услуг",        
+        "что вы делаете",
+        "чем занимаетесь",
+        "что оказываете",
+        "какие работы выполняете"
+    ]
+
+    if any(
+        phrase in query.lower()
+        for phrase in service_queries
+    ):
+        top_k = 20
+
+    distances, indices = index.search(
+        vector,
+        top_k
+    )
 
     chunks = []
 
