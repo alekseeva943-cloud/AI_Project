@@ -12,6 +12,7 @@
 
 import os
 import asyncio
+import shutil
 import re
 from typing import List
 from unittest import result
@@ -1115,8 +1116,15 @@ async def start_build_new_base(
         env = os.environ.copy()
         env["RAG_SOURCE_URL"] = current_url
 
+        uv_path = shutil.which("uv")
+
+        if uv_path is None:
+            raise FileNotFoundError(
+                "Не найден uv. Установите uv или добавьте его в PATH."
+            )
+
         process = await asyncio.create_subprocess_exec(
-            "/root/.local/bin/uv",
+            uv_path,
             "run",
             "build.py",
             cwd=str(parser_dir),
@@ -1199,6 +1207,13 @@ async def start_build_new_base(
 
                 "Для применения используйте:\n"
                 "🔄 Активировать новую базу"
+            )
+
+            # Возвращаем пользователя обратно
+            # в меню управления базой знаний
+            await show_knowledge_base_menu(
+                update,
+                context
             )
 
         else:
@@ -1852,9 +1867,6 @@ def get_admin_handlers():
             pattern=r"^(chat_page_|back_to_users)$"
         ),
     ]
-
-
-    
 
     # ======================================================
     # Возвращаем все обработчики
