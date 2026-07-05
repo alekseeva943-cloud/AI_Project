@@ -13,3 +13,12 @@ __pycache__/
 
 # system
 .python-version
+
+# Parser output
+parser/output/
+
+# Parser cache
+parser/cache/
+
+# Parser logs
+parser/logs/
