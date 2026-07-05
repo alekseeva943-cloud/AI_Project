@@ -1,0 +1,5 @@
+faiss-cpuuv pip install -r requirements.txt
+numpy==2.4.4
+openai==2.32.0
+python-dotenv==1.2.2
+python-telegram-bot==22.7

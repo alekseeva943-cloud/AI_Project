@@ -1116,7 +1116,7 @@ async def start_build_new_base(
         env["RAG_SOURCE_URL"] = current_url
 
         process = await asyncio.create_subprocess_exec(
-            "uv",
+            "/root/.local/bin/uv",
             "run",
             "build.py",
             cwd=str(parser_dir),
