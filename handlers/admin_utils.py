@@ -4,7 +4,7 @@ import logging
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from database_old import get_last_messages, get_all_admins, DB_PATH
+from database import get_last_messages, get_all_admins, DB_PATH
 from config.config import CONTEXT_MESSAGE_COUNT
 
 logger = logging.getLogger(__name__)
@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 async def send_context_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE, user, user_message: str, gpt_answer: str):
     """Отправляет админу контекст, когда GPT дал неуверенный ответ"""
     try:
-        from database_old import get_last_messages, get_all_admins, DB_PATH
+        from database import get_last_messages, get_all_admins, DB_PATH
         from config.config import CONTEXT_MESSAGE_COUNT
         import logging
         logger = logging.getLogger(__name__)

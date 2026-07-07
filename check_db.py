@@ -1,7 +1,7 @@
 # check_db.py
 
 import sqlite3
-from database_old import DB_PATH
+from database import DB_PATH
 
 
 def check_clients():

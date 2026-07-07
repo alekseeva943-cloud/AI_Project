@@ -8,7 +8,7 @@ from telegram.ext import ContextTypes, Application
 
 from config.config import ADMIN_QUEUE, CONTEXT_MESSAGE_COUNT
 
-from database_old import (
+from database import (
     save_client_info,
     add_message,
     get_last_messages,
@@ -64,7 +64,7 @@ def append_if_not_duplicate(history: list, text: str) -> list:
 # =======================
 
 async def notify_manager(context: ContextTypes.DEFAULT_TYPE, message: str):
-    from database_old import get_all_admins
+    from database import get_all_admins
 
     admins = get_all_admins(DB_PATH)
 
@@ -234,7 +234,7 @@ async def handle_gpt_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
             # Получаем список администраторов.
-            from database_old import get_all_admins
+            from database import get_all_admins
 
             admins = get_all_admins(DB_PATH)
 

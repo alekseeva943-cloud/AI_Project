@@ -34,12 +34,26 @@ from config.admin_keyboards import (
     get_knowledge_base_keyboard,
     get_broadcast_confirm_keyboard
 )
-from database_old import add_message, get_all_active_user_ids, get_users_with_phone, mark_user_blocked
+from database import (
+    add_message,
+    get_all_active_user_ids,
+    get_users_with_phone,
+    mark_user_blocked,
+)
 from telegram import KeyboardButton, Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
 import telegram
 from telegram.ext import ContextTypes, MessageHandler, filters, ConversationHandler, CallbackQueryHandler
 import logging
-from database_old import get_last_n_messages, get_total_users, get_client_info, search_clients, get_top_requests, get_total_clients_count, get_paginated_messages, get_total_messages_count, get_clients_paginated
+from database import (
+    get_client_info,
+    get_clients_paginated,
+    get_paginated_messages,
+    get_top_requests,
+    get_total_clients_count,
+    get_total_messages_count,
+    get_total_users,
+    search_clients,
+)
 from handlers.utilities import go_back, cancel_current_action
 from handlers.admin_management import add_admin_start, handle_admin_input, remove_admin_start, show_admins_menu
 
@@ -182,7 +196,7 @@ async def handle_stats_period(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     days = period_map.get(period_text)
 
-    from database_old import get_detailed_stats
+    from database import get_detailed_stats
 
     stats = get_detailed_stats(days=days)
 
@@ -251,7 +265,7 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
 # Показывает расширенную статистику проекта.
 async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        from database_old import get_detailed_stats
+        from database import get_detailed_stats
         stats = get_detailed_stats()
         if not stats:
             await update.message.reply_text("❌ Не удалось загрузить статистику")

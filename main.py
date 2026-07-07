@@ -30,8 +30,7 @@ import logging
 
 from telegram import Update
 from telegram.ext import (
-    Application,
-    CallbackQueryHandler,
+    Application,    
     CommandHandler,
     ContextTypes,
     MessageHandler,
@@ -51,10 +50,7 @@ from handlers.start import start
 from handlers.admin import (
     get_admin_handlers,
     show_admin_panel,
-    show_settings_menu,
-)
-
-from handlers.admin_management import show_admins_menu
+    )
 
 # ==========================================================
 # GPT
@@ -160,7 +156,10 @@ async def post_init(application: Application) -> None:
 
     # Локальный импорт позволяет избежать циклических
     # зависимостей во время запуска проекта.
-    from database_old import DB_PATH, add_admin
+    from database import (
+    DB_PATH,
+    add_admin,
+)
 
     logger.info("🚀 Выполняется первоначальная инициализация приложения...")
 

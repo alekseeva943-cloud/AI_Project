@@ -6,7 +6,13 @@ from telegram.ext import ContextTypes
 from config.config import is_admin, CONTEXT_MESSAGE_COUNT
 from config.keyboards import get_main_keyboard
 from config.admin_keyboards import get_admin_keyboard
-from database_old import DB_PATH, get_last_messages, save_client_info, get_client_info, get_all_admins, DB_PATH
+from database import (
+    DB_PATH,
+    get_all_admins,
+    get_client_info,
+    get_last_messages,
+    save_client_info,
+)
 from handlers.admin import show_admin_panel
 from handlers.menu import main_menu_handler
 import logging
