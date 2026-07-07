@@ -1,17 +1,23 @@
-#router_service.py
+# services/router_service.py
 
 """
-AI-роутер запросов.
+Определяет намерение пользователя.
 
-Определяет намерение пользователя (intent)
-и возвращает результат в формате JSON.
+Использует GPT для анализа сообщения
+и возвращает тип запроса
+(small_talk, info, problem, lead или unknown).
+
+Returns:
+    dict.
 """
 
 import json
 
 from openai import OpenAI
+
 from config.config import OPENAI_API_KEY
-from prompts.router_prompt import SYSTEM_PROMPT
+from prompts.router_prompt import ROUTER_PROMPT
+
 
 # ==========================================================
 # Клиент OpenAI.
@@ -46,11 +52,11 @@ def classify_intent(
     messages = [
         {
             "role": "system",
-            "content": SYSTEM_PROMPT,
+            "content": ROUTER_PROMPT,
         }
     ]
 
-    # Добавляем несколько последних сообщений,
+    # Добавляем последние сообщения,
     # чтобы сохранить контекст диалога.
     if history:
         messages.extend(history[-5:])
