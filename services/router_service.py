@@ -16,7 +16,7 @@ import json
 from openai import OpenAI
 
 from config.config import OPENAI_API_KEY
-from prompts.router_prompt import ROUTER_PROMPT
+from prompts import ROUTER_PROMPT
 
 
 # ==========================================================

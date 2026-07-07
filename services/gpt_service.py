@@ -1,48 +1,70 @@
-# gpt_service.py
+# services/gpt_service.py
 
-import os
-from venv import logger
+"""
+Работа с GPT.
+
+Назначение:
+- загрузка системных промптов;
+- подготовка сообщений для GPT;
+- генерация ответа модели;
+- обработка ошибок OpenAI API.
+"""
+
+import logging
+
 from openai import OpenAI
 from config.config import OPENAI_API_KEY
+from prompts import (
+    SYSTEM_PROMPT,
+    TASK_PROMPT,
+)
 
+
+# ==========================================================
+# Клиент OpenAI.
+# ==========================================================
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
+
+# ==========================================================
+# Логгер модуля.
+# ==========================================================
+
+logger = logging.getLogger(__name__)
+
+
+# ==========================================================
+# Константы модуля.
+# ==========================================================
+
+# Модель, используемая для генерации ответов.
 MODEL = "gpt-4o-mini"
 
-
-# =======================
-# 🔹 ЗАГРУЗКА ПРОМПТОВ
-# =======================
-
-# абсолютный путь к корню проекта
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-
-def load_prompt(filename: str) -> str:
-    path = os.path.join(BASE_DIR, "prompts", filename)
-
-    with open(path, "r", encoding="utf-8") as f:
-        return f.read()
-
-
-SYSTEM_PROMPT = load_prompt("system_prompt.txt")
-TASK_PROMPT = load_prompt("task_prompt.txt")
-
-
-# =======================
-# 🔹 GPT ГЕНЕРАЦИЯ
-# =======================
+# ==========================================================
+# Генерация ответа GPT.
+# ==========================================================
 
 def generate_answer(
-        query: str,
-        history: list = None,
-        context: str = None
-):
+    query: str,
+    history: list[dict] | None = None,
+    context: str | None = None,
+) -> str:
+    """
+    Генерирует ответ GPT.
 
-    logger.info("GPT REQUEST START")
+    Использует системный промпт,
+    дополнительный промпт с задачей,
+    историю переписки и контекст RAG.
 
-    # 🔥 формируем task_prompt
+    Returns:
+        str.
+    """
+
+    logger.info("🤖 GPT-запрос отправлен.")
+
+    # Добавляем контекст базы знаний,
+    # если он был найден.
     if context:
         final_task_prompt = (
             f"{TASK_PROMPT}\n\n"
@@ -51,35 +73,38 @@ def generate_answer(
     else:
         final_task_prompt = TASK_PROMPT
 
-    # 🔥 сообщения
+    # Формируем сообщения,
+    # отправляемые модели.
     messages = [
         {
             "role": "system",
-            "content": SYSTEM_PROMPT
+            "content": SYSTEM_PROMPT,
         },
         {
             "role": "system",
-            "content": final_task_prompt
-        }
+            "content": final_task_prompt,
+        },
     ]
 
-    # 🔥 история
+    # Добавляем последние сообщения,
+    # чтобы сохранить контекст диалога.
     if history:
         messages.extend(history[-8:])
 
-    # 🔥 текущий запрос
-    messages.append({
-        "role": "user",
-        "content": query
-    })
+    # Добавляем текущий запрос пользователя.
+    messages.append(
+        {
+            "role": "user",
+            "content": query,
+        }
+    )
 
     try:
-
         response = client.chat.completions.create(
             model=MODEL,
             messages=messages,
             temperature=0.7,
-            timeout=60
+            timeout=60,
         )
 
         answer = (
@@ -90,15 +115,12 @@ def generate_answer(
             .strip()
         )
 
-        logger.info("GPT REQUEST SUCCESS")
+        logger.info("✅ GPT успешно ответил.")
 
         return answer
 
-    except Exception as e:
-
-        logger.error(
-            f"GPT REQUEST ERROR: {e}",
-            exc_info=True
+    except Exception:
+        logger.exception(
+            "Ошибка при обращении к GPT."
         )
-
         raise
