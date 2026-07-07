@@ -1,14 +1,13 @@
+# services/knowledge_base_manager.py
+
 """
-knowledge_base_manager.py
+Управление базой знаний.
 
-Сервис управления базой знаний.
-
-Отвечает за:
-
-- создание резервной копии;
-- активацию новой базы;
+Назначение:
+- создание резервной копии базы знаний;
+- активация новой базы знаний;
 - откат на предыдущую версию;
-- получение статуса базы.
+- получение информации о состоянии базы знаний.
 
 Архитектура:
 
@@ -20,65 +19,98 @@ data
         ↓
 backup
 
-Parser никогда не пишет напрямую в data.
-
-Основной бот никогда не пишет в parser/output.
+Parser никогда не изменяет рабочую базу напрямую.
+Основной бот никогда не работает с parser/output.
 """
 
 import json
-from pathlib import Path
-import shutil
 import logging
+import shutil
+from pathlib import Path
+
+
+# ==========================================================
+# Логгер модуля.
+# ==========================================================
 
 logger = logging.getLogger(__name__)
 
 
 # ==========================================================
-# Пути основного проекта
+# Пути проекта.
 # ==========================================================
 
+# Корневая директория проекта.
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-# Рабочая база бота
+# Каталог активной базы знаний.
 DATA_DIR = PROJECT_ROOT / "data"
 
-# Резервная копия последней рабочей версии
+# Каталог резервных копий.
 BACKUP_DIR = PROJECT_ROOT / "backup"
 
-# Новая база, собранная parser
+# Каталог новой базы, собранной парсером.
 PARSER_OUTPUT_DIR = PROJECT_ROOT / "parser" / "output"
 
 
 # ==========================================================
-# Создает резервную копию текущей рабочей базы
+# Константы модуля.
 # ==========================================================
+
+# Файлы, входящие в состав базы знаний.
+KNOWLEDGE_BASE_FILES = [
+    "faiss.index",
+    "metadata.json",
+    "build_stats.json",
+    "chunks_final.json",
+]
+
+
+# ==========================================================
+# Вспомогательные функции.
+# ==========================================================
+
+def _load_json(file_path: Path) -> dict | None:
+    """
+    Загружает JSON-файл.
+
+    Returns:
+        dict | None.
+    """
+
+    if not file_path.exists():
+        return None
+
+    with open(
+        file_path,
+        "r",
+        encoding="utf-8",
+    ) as file:
+        return json.load(file)
+
+
+# ==========================================================
+# Работа с резервными копиями.
+# ==========================================================
+
 def create_backup() -> bool:
     """
-    Создает резервную копию текущей активной базы.
+    Создаёт резервную копию
+    текущей рабочей базы знаний.
 
-    Копируются только файлы,
-    необходимые для работы RAG.
-
-    Возвращает:
-        True  - успех
-        False - ошибка
+    Returns:
+        bool.
     """
 
     try:
-
+        # Гарантируем существование каталога backup.
         BACKUP_DIR.mkdir(
             parents=True,
-            exist_ok=True
+            exist_ok=True,
         )
 
-        files_to_backup = [
-            "faiss.index",
-            "metadata.json",
-            "build_stats.json",
-            "chunks_final.json"
-        ]
-
-        for filename in files_to_backup:
+        # Копируем все файлы базы знаний.
+        for filename in KNOWLEDGE_BASE_FILES:
 
             source = DATA_DIR / filename
 
@@ -89,73 +121,51 @@ def create_backup() -> bool:
 
             shutil.copy2(
                 source,
-                destination
+                destination,
             )
 
         logger.info(
-            "✅ Резервная копия базы создана"
+            "✅ Резервная копия базы знаний создана."
         )
 
         return True
 
-    except Exception as e:
-
+    except Exception:
         logger.exception(
-            f"Ошибка создания backup: {e}"
+            "Ошибка создания резервной копии."
         )
-
         return False
+    
 
-
-# ==========================================================
-# Откатывает базу знаний на предыдущую рабочую версию
-# ==========================================================
 def rollback_to_backup() -> bool:
     """
-    Восстанавливает предыдущую рабочую базу знаний
-    из резервной копии.
+    Восстанавливает предыдущую
+    рабочую версию базы знаний.
 
-    Используется в двух случаях:
+    Используется при ручном или
+    автоматическом откате после
+    неудачной активации новой базы.
 
-    1. Администратор нажал кнопку:
-       "⏪ Откатить предыдущую базу"
-
-    2. Автоматический откат после неудачной
-       активации новой базы.
-
-    Алгоритм:
-
-    backup/
-        ↓
-    data/
-
-    Возвращает:
-        True  - успех
-        False - ошибка
+    Returns:
+        bool.
     """
 
     try:
-
-        files_to_restore = [
-            "faiss.index",
-            "metadata.json",
-            "build_stats.json",
-            "chunks_final.json"
-        ]
-
-        # гарантируем существование data/
+        # Гарантируем существование каталога data.
         DATA_DIR.mkdir(
             parents=True,
-            exist_ok=True
+            exist_ok=True,
         )
 
-        for filename in files_to_restore:
+        # Восстанавливаем файлы резервной копии.
+        for filename in KNOWLEDGE_BASE_FILES:
 
             source = BACKUP_DIR / filename
 
             if not source.exists():
 
-                # build_stats.json не является обязательным
+                # Статистика сборки не является
+                # обязательным файлом.
                 if filename == "build_stats.json":
                     continue
 
@@ -167,188 +177,114 @@ def rollback_to_backup() -> bool:
 
             shutil.copy2(
                 source,
-                destination
+                destination,
             )
 
         logger.info(
-            "✅ Выполнен откат на предыдущую базу"
+            "✅ Резервная копия успешно восстановлена."
         )
 
         return True
 
-    except Exception as e:
-
+    except Exception:
         logger.exception(
-            f"Ошибка rollback базы: {e}"
+            "Ошибка восстановления резервной копии."
         )
-
         return False
-
+    
 # ==========================================================
-# Активирует новую базу знаний
+# Активация базы знаний.
 # ==========================================================
-
 
 def activate_new_base() -> bool:
     """
     Активирует новую базу знаний.
 
     Алгоритм:
+    1. Создаёт резервную копию текущей базы.
+    2. Копирует новую базу из parser/output.
+    3. Делает её активной.
 
-    1. Создаем backup текущей базы.
-    2. Копируем новую базу из parser/output.
-    3. Возвращаем успех или ошибку.
-
-    На текущем этапе:
-    - без reload FAISS;
-    - без health check;
-    - без rollback.
-
-    Эти механизмы будут добавлены следующим шагом.
+    Returns:
+        bool.
     """
 
     try:
-
-        # ----------------------------------------------
-        # 1. Создаем резервную копию
-        # ----------------------------------------------
+        # Создаём резервную копию текущей базы.
         if not create_backup():
-            raise Exception(
+            raise RuntimeError(
                 "Не удалось создать резервную копию."
             )
 
-        # ----------------------------------------------
-        # 2. Файлы новой базы
-        # ----------------------------------------------
-        files_to_activate = [
-            "faiss.index",
-            "metadata.json",
-            "build_stats.json",
-            "chunks_final.json"
-        ]
-
-        # гарантируем существование data/
+        # Гарантируем существование каталога data.
         DATA_DIR.mkdir(
             parents=True,
-            exist_ok=True
+            exist_ok=True,
         )
 
-        # ----------------------------------------------
-        # 3. Копируем новую базу
-        # ----------------------------------------------
-        for filename in files_to_activate:
+        # Копируем новую базу знаний.
+        for filename in KNOWLEDGE_BASE_FILES:
 
             source = PARSER_OUTPUT_DIR / filename
 
             if not source.exists():
                 raise FileNotFoundError(
-                    f"Не найден файл: {source}"
+                    f"Не найден файл базы знаний: {source}"
                 )
 
             destination = DATA_DIR / filename
 
             shutil.copy2(
                 source,
-                destination
+                destination,
             )
 
         logger.info(
-            "✅ Новая база активирована"
+            "✅ Новая база знаний успешно активирована."
         )
 
         return True
 
-    except Exception as e:
-
+    except Exception:
         logger.exception(
-            f"Ошибка активации базы: {e}"
+            "Ошибка активации базы знаний."
         )
-
         return False
 
 
 # ==========================================================
-# Возвращает статус системы баз знаний
+# Статус базы знаний.
 # ==========================================================
+
 def get_knowledge_base_status() -> dict:
     """
-    Собирает информацию обо всех версиях базы знаний.
+    Возвращает информацию
+    о всех версиях базы знаний.
 
-    Проверяет:
-
-    - активную рабочую базу;
-    - новую собранную базу;
-    - резервную копию.
-
-    Используется кнопкой:
-    📊 Статус базы
+    Returns:
+        dict.
     """
 
-    status = {}
-
     try:
+        return {
+            "active": _load_json(
+                DATA_DIR / "build_stats.json"
+            ),
+            "new": _load_json(
+                PARSER_OUTPUT_DIR / "build_stats.json"
+            ),
+            "backup": _load_json(
+                BACKUP_DIR / "build_stats.json"
+            ),
+        }
 
-        # ==================================================
-        # Активная база
-        # ==================================================
-        active_stats_file = (
-            DATA_DIR
-            / "build_stats.json"
-        )
-
-        status["active"] = None
-
-        if active_stats_file.exists():
-
-            with open(
-                active_stats_file,
-                "r",
-                encoding="utf-8"
-            ) as f:
-                status["active"] = json.load(f)
-
-        # ==================================================
-        # Новая собранная база
-        # ==================================================
-        new_stats_file = (
-            PARSER_OUTPUT_DIR
-            / "build_stats.json"
-        )
-
-        status["new"] = None
-
-        if new_stats_file.exists():
-
-            with open(
-                new_stats_file,
-                "r",
-                encoding="utf-8"
-            ) as f:
-                status["new"] = json.load(f)
-
-        # ==================================================
-        # Backup
-        # ==================================================
-        backup_stats_file = (
-            BACKUP_DIR
-            / "build_stats.json"
-        )
-
-        status["backup"] = None
-
-        if backup_stats_file.exists():
-
-            with open(
-                backup_stats_file,
-                "r",
-                encoding="utf-8"
-            ) as f:
-                status["backup"] = json.load(f)
-
-    except Exception as e:
-
+    except Exception:
         logger.exception(
-            f"Ошибка получения статуса базы: {e}"
+            "Ошибка получения статуса базы знаний."
         )
 
-    return status
+        return {
+            "active": None,
+            "new": None,
+            "backup": None,
+        }
