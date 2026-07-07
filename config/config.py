@@ -79,5 +79,5 @@ def get_empty_keyboard():
 # =======================
 
 def is_admin(user_id: int) -> bool:
-    from database import is_admin as db_is_admin, DB_PATH
+    from database_old import is_admin as db_is_admin, DB_PATH
     return user_id == SUPERADMIN_ID or db_is_admin(DB_PATH, user_id)

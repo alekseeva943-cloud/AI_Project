@@ -5,7 +5,7 @@ from telegram.ext import ContextTypes
 from config.admin_keyboards import get_admins_management_keyboard
 from config.config import SUPERADMIN_ID
 from config.keyboards import get_cancel_keyboard
-from database import get_all_admins, add_admin, remove_admin, DB_PATH
+from database_old import get_all_admins, add_admin, remove_admin, DB_PATH
 import logging
 
 logger = logging.getLogger(__name__)

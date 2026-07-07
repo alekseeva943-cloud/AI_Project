@@ -6,7 +6,7 @@ from telegram.ext import ContextTypes
 from config.config import is_admin, CONTEXT_MESSAGE_COUNT
 from config.keyboards import get_main_keyboard
 from config.admin_keyboards import get_admin_keyboard
-from database import DB_PATH, get_last_messages, save_client_info, get_client_info, get_all_admins, DB_PATH
+from database_old import DB_PATH, get_last_messages, save_client_info, get_client_info, get_all_admins, DB_PATH
 from handlers.admin import show_admin_panel
 from handlers.menu import main_menu_handler
 import logging
@@ -60,5 +60,3 @@ async def main_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup = get_main_keyboard()
 
     await update.message.reply_text("Выберите услугу:", reply_markup=reply_markup)
-
-

@@ -23,7 +23,7 @@ from config.keyboards import (
 from config import is_admin, get_main_keyboard
 from config.config import CONTEXT_MESSAGE_COUNT
 
-from database import add_message, get_all_admins, get_last_messages, DB_PATH, save_client_info
+from database_old import add_message, get_all_admins, get_last_messages, DB_PATH, save_client_info
 from config import buttons as btn
 
 logger = logging.getLogger(__name__)
