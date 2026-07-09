@@ -1,4 +1,6 @@
 """
+database/statistics.py
+
 Статистика базы данных.
 
 Содержит функции для формирования
@@ -20,25 +22,28 @@ logger = logging.getLogger(__name__)
 
 
 # ==========================================================
-# Статистика.
+# Топ обращений.
 # ==========================================================
 
 def get_top_requests(
     days: int = 7,
-):
+) -> list[tuple[str, int]]:
     """
     Возвращает самые популярные обращения
     пользователей за выбранный период.
 
+    Args:
+        days: Количество дней для выборки.
+
     Returns:
-        list.
+        Список кортежей формата (текст_обращения, количество).
     """
 
     try:
         with sqlite3.connect(DB_PATH) as connection:
             cursor = connection.cursor()
 
-            # Формируем количество параметров
+            # Формируем количество плейсхолдеров
             # для оператора IN (...).
             placeholders = ",".join(
                 ["?"] * len(HELP_REQUEST_BUTTONS)
@@ -76,15 +81,28 @@ def get_top_requests(
             error,
         )
         return []
-    
 
-def get_detailed_stats() -> dict:
+
+# ==========================================================
+# Сводная статистика.
+# ==========================================================
+
+def get_detailed_stats(
+    days: int = 30,
+) -> dict:
     """
     Возвращает сводную статистику
     для административной панели.
 
+    Абсолютные значения (всего пользователей, всего с телефоном) 
+    считаются за все время. Периодические значения (новые, активные) 
+    динамически фильтруются по переданному аргументу days.
+
+    Args:
+        days: Количество дней для расчета новых и активных пользователей.
+
     Returns:
-        dict.
+        Словарь со статистическими данными.
     """
 
     with sqlite3.connect(DB_PATH) as connection:
@@ -93,6 +111,10 @@ def get_detailed_stats() -> dict:
         cursor = connection.cursor()
 
         stats = {}
+
+        # ==========================================
+        # Абсолютные значения (за все время)
+        # ==========================================
 
         # Общее количество пользователей.
         cursor.execute(
@@ -134,7 +156,45 @@ def get_detailed_stats() -> dict:
         )
         stats["blocked_count"] = cursor.fetchone()[0]
 
-        # Активные пользователи за последние сутки.
+        # ==========================================
+        # Динамические значения (по периоду)
+        # ==========================================
+
+        # Активные пользователи за переданный период.
+        cursor.execute(
+            """
+            SELECT COUNT(DISTINCT user_id)
+            FROM messages
+            WHERE timestamp >= datetime('now', ?)
+            """,
+            (f"-{days} days",)
+        )
+        stats["active_last_30_days"] = cursor.fetchone()[0]
+
+        # Новые пользователи за переданный период.
+        cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM clients
+            WHERE joined_at >= datetime('now', ?)
+            """,
+            (f"-{days} days",)
+        )
+        stats["new_today"] = cursor.fetchone()[0]
+
+        # Заполняем оставшиеся поля для совместимости,
+        # если они вызываются где-то еще (из старой(show_stats) логики)
+        # Считаем за 7 дней
+        cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM clients
+            WHERE joined_at >= datetime('now', '-7 days')
+            """
+        )
+        stats["new_last_7_days"] = cursor.fetchone()[0]
+
+        # Активные за 24 часа (хардкод, так как это стандартный метрик)
         cursor.execute(
             """
             SELECT COUNT(DISTINCT user_id)
@@ -143,35 +203,5 @@ def get_detailed_stats() -> dict:
             """
         )
         stats["active_chats_24h"] = cursor.fetchone()[0]
-
-        # Новые пользователи за сутки.
-        cursor.execute(
-            """
-            SELECT COUNT(*)
-            FROM clients
-            WHERE joined_at >= datetime('now', '-1 day')
-            """
-        )
-        stats["new_today"] = cursor.fetchone()[0]
-
-        # Новые пользователи за неделю.
-        cursor.execute(
-            """
-            SELECT COUNT(*)
-            FROM clients
-            WHERE joined_at >= datetime('now', '-7 day')
-            """
-        )
-        stats["new_last_7_days"] = cursor.fetchone()[0]
-
-        # Активные пользователи за месяц.
-        cursor.execute(
-            """
-            SELECT COUNT(DISTINCT user_id)
-            FROM messages
-            WHERE timestamp >= datetime('now', '-30 day')
-            """
-        )
-        stats["active_last_30_days"] = cursor.fetchone()[0]
 
         return stats

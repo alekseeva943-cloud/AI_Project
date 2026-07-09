@@ -1,4 +1,6 @@
 """
+main.py
+
 Главная точка входа Telegram-бота.
 
 Назначение:
@@ -47,10 +49,11 @@ from handlers.start import start
 # Обработчики административной панели
 # ==========================================================
 
+from handlers.admin import show_admin_panel
 from handlers.admin import (
     get_admin_handlers,
     show_admin_panel,
-    )
+)
 
 # ==========================================================
 # GPT

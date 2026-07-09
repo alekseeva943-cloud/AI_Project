@@ -1,6 +1,6 @@
-# handlers/utilities/menu.py
-
 """
+handlers/utilities/menu.py
+
 Работа с меню Telegram-бота.
 
 Содержит функции навигации между
@@ -14,6 +14,11 @@ from config import get_main_keyboard, is_admin
 from config.keyboards import (
     get_help_keyboard,
     get_services_keyboard,
+)
+
+from handlers.utilities.services import (
+    handle_services,
+    show_auto_help_submenu,
 )
 
 
@@ -87,11 +92,6 @@ async def go_back(
         None.
     """
 
-    from .services import (
-        handle_services,
-        show_auto_help_submenu,
-    )
-
     state = context.user_data.get(
         "previous_state"
     )
@@ -118,8 +118,11 @@ async def cancel_current_action(
 ):
     """
     Отменяет текущий сценарий
-    и возвращает пользователя
-    в предыдущее меню.
+    и возвращает пользователя в меню,
+    которое было сохранено в cancel_target.
+
+    Если cancel_target не задан, 
+    использует стандартную функцию go_back.
 
     Returns:
         ConversationHandler.END.
@@ -131,5 +134,7 @@ async def cancel_current_action(
 
     if target:
         await target(update, context)
+    else:
+        await go_back(update, context)
 
     return ConversationHandler.END

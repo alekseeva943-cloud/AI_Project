@@ -1,134 +1,269 @@
-# gpt_chat.py
+# handlers/gpt_chat.py
+
+"""
+Обработка GPT-диалога.
+
+Назначение:
+- обработка сообщений пользователя;
+- определение намерения (Router);
+- поиск информации через RAG;
+- генерация ответа GPT;
+- обработка лидов;
+- уведомление администраторов.
+"""
 
 import logging
 import re
 
 from telegram import Update
-from telegram.ext import ContextTypes, Application
+from telegram.ext import (
+    Application,
+    ContextTypes,
+)
 
-from config.config import ADMIN_QUEUE, CONTEXT_MESSAGE_COUNT
+from config.config import (
+    ADMIN_QUEUE,
+    CONTEXT_MESSAGE_COUNT,
+)
 
 from database import (
-    save_client_info,
-    add_message,
-    get_last_messages,
     DB_PATH,
-    get_client_info
+    add_message,
+    get_all_admins,
+    get_client_info,
+    get_last_messages,
+    save_client_info,
 )
 
 from handlers.start import start as main_menu_handler
-from services.router_service import classify_intent
-from services.rag_service import retrieve_context
 from services.gpt_service import generate_answer
+from services.rag_service import retrieve_context
+from services.router_service import classify_intent
+
+
+# ==========================================================
+# Логгер модуля.
+# ==========================================================
 
 logger = logging.getLogger(__name__)
 
 
-# =======================
-# 🔹 КОНСТАНТЫ (ВСЁ В ОДНОМ МЕСТЕ)
-# =======================
+# ==========================================================
+# Константы модуля.
+# ==========================================================
 
+# Сообщение пользователю после
+# успешной отправки заявки менеджеру.
 CLIENT_LEAD_RESPONSE = (
     "Отправил ваши контакты бригаде 🚗\n"
-    "С вами скоро свяжутся и подъедут на место 👍"
+    "С вами скоро свяжутся "
+    "и подъедут на место 👍"
 )
 
-ADMIN_NEW_LEAD_TITLE = "📞 НОВАЯ ЗАЯВКА"
+# Заголовок новой заявки,
+# отображаемый у администратора.
+ADMIN_NEW_LEAD_TITLE = (
+    "📞 НОВАЯ ЗАЯВКА"
+)
 
 
-# =======================
-# 🔹 УТИЛИТЫ
-# =======================
+# ==========================================================
+# Вспомогательные функции.
+# ==========================================================
 
 def is_phone(text: str) -> bool:
-    digits = re.sub(r"\D", "", text)
+    """
+    Проверяет, содержит ли строка
+    номер телефона.
+
+    Returns:
+        bool.
+    """
+
+    digits = re.sub(
+        r"\D",
+        "",
+        text,
+    )
+
     return len(digits) >= 10
 
+# ==========================================================
+# Работа с историей диалога.
+# ==========================================================
 
-def format_history(history: list) -> str:
+def format_history(
+    history: list,
+) -> str:
+    """
+    Преобразует историю диалога
+    в удобный текстовый формат
+    для администратора.
+
+    Returns:
+        str.
+    """
+
     lines = []
-    for msg in history[-10:]:
-        role = "👤 Клиент" if msg["role"] == "user" else "🤖 Бот"
-        lines.append(f"{role}: {msg['content']}")
+
+    for message in history[-10:]:
+
+        role = (
+            "👤 Клиент"
+            if message["role"] == "user"
+            else "🤖 Бот"
+        )
+
+        lines.append(
+            f"{role}: {message['content']}"
+        )
+
     return "\n".join(lines)
 
 
-def append_if_not_duplicate(history: list, text: str) -> list:
-    if history and history[-1]["role"] == "user" and history[-1]["content"] == text:
+def append_if_not_duplicate(
+    history: list,
+    text: str,
+) -> list:
+    """
+    Добавляет сообщение
+    в историю только при отсутствии
+    полного совпадения с последним.
+
+    Returns:
+        list.
+    """
+
+    if (
+        history
+        and history[-1]["role"] == "user"
+        and history[-1]["content"] == text
+    ):
         return history
-    return history + [{"role": "user", "content": text}]
 
+    return history + [
+        {
+            "role": "user",
+            "content": text,
+        }
+    ]
 
-# =======================
-# 🔹 УВЕДОМЛЕНИЕ АДМИНА
-# =======================
+# ==========================================================
+# Уведомление администраторов.
+# ==========================================================
 
-async def notify_manager(context: ContextTypes.DEFAULT_TYPE, message: str):
-    from database import get_all_admins
+async def notify_manager(
+    context: ContextTypes.DEFAULT_TYPE,
+    message: str,
+):
+    """
+    Отправляет новую заявку
+    всем администраторам.
+
+    Если сообщение не удалось
+    отправить, оно помещается
+    в очередь повторной отправки.
+
+    Returns:
+        None.
+    """
 
     admins = get_all_admins(DB_PATH)
 
     for admin in admins:
+
         try:
+
             await context.bot.send_message(
                 chat_id=admin["user_id"],
-                text=message
+                text=message,
             )
+
         except Exception:
-            ADMIN_QUEUE.setdefault(admin["user_id"], []).append(message)
 
+            ADMIN_QUEUE.setdefault(
+                admin["user_id"],
+                [],
+            ).append(message)
 
-# =======================
-# 🔹 СБОРКА ЗАЯВКИ
-# =======================
+# ==========================================================
+# Формирование заявки.
+# ==========================================================
 
-# Формирует красивую карточку заявки для менеджера.
-# Используется для:
-# - заявок по телефону;
-# - лидов от GPT;
-# - геолокации;
-# - любых будущих типов обращений.
-def build_lead_message(user, text: str, history: list) -> str:
+def build_lead_message(
+    user,
+    text: str,
+    history: list,
+) -> str:
+    """
+    Формирует карточку заявки
+    для администратора.
 
-    # Формируем отображаемый username
-    username = f"@{user.username}" if user.username else "без username"
+    В карточку входят:
+    - данные пользователя;
+    - телефон;
+    - последнее действие;
+    - история переписки.
 
-    # Получаем последние сообщения клиента
+    Returns:
+        str.
+    """
+
+    # Формируем отображаемый username.
+    username = (
+        f"@{user.username}"
+        if user.username
+        else "без username"
+    )
+
+    # Получаем историю переписки.
     context_text = format_history(history)
 
-    # Получаем информацию о клиенте из базы,
-    # чтобы сразу показать менеджеру телефон.
+    # Получаем сохранённые данные клиента.
     client_info = get_client_info(user.id)
 
-    # Если телефон есть — показываем его,
-    # иначе выводим "не указан".
+    # Добавляем телефон,
+    # если он уже известен системе.
     phone = (
         client_info.get("phone")
-        if client_info and client_info.get("phone")
+        if client_info
+        and client_info.get("phone")
         else "не указан"
     )
 
-    return f"""
-{ADMIN_NEW_LEAD_TITLE}
+    return (
+        f"{ADMIN_NEW_LEAD_TITLE}\n\n"
+        f"👤 {username}\n"
+        f"🆔 {user.id}\n"
+        f"🔗 tg://user?id={user.id}\n"
+        f"📞 {phone}\n\n"
+        f"📩 Последнее действие:\n"
+        f"{text}\n\n"
+        f"📄 История диалога:\n"
+        f"{context_text}"
+    )
 
-👤 {username}
-🆔 {user.id}
-🔗 tg://user?id={user.id}
-📞 {phone}
 
-📩 Последнее действие:
-{text}
+# ==========================================================
+# Основной обработчик GPT.
+# ==========================================================
 
-📄 Диалог:
-{context_text}
-"""
+async def handle_gpt_query(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+):
+    """
+    Обрабатывает сообщения пользователя,
+    определяет намерение, при необходимости
+    обращается к RAG и GPT, а также
+    формирует заявки для менеджеров.
 
-# =======================
-# 🔹 ОСНОВНОЙ HANDLER
-# =======================
+    Returns:
+        None.
+    """
 
-async def handle_gpt_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
+
         user = update.effective_user
         message = update.message
 
@@ -137,225 +272,316 @@ async def handle_gpt_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         text = message.text or ""
 
-        # --- фильтры ---
-        if text.startswith("/") or text == "💬 Задать вопрос":
+        # ----------------------------------------------
+        # Игнорируем команды и кнопки,
+        # которые не должны обрабатываться GPT.
+        # ----------------------------------------------
+
+        if (
+            text.startswith("/")
+            or text == "💬 Задать вопрос"
+        ):
             return
 
         if text == "⬅️ Вернуться":
-            await main_menu_handler(update, context)
+            await main_menu_handler(
+                update,
+                context,
+            )
             return
 
-        # --- сохраняем клиента ---
+        # ----------------------------------------------
+        # Обновляем информацию о пользователе.
+        # ----------------------------------------------
+
         client_info = get_client_info(user.id)
-        phone_saved = client_info.get("phone") if client_info else None
+
+        phone_saved = (
+            client_info.get("phone")
+            if client_info
+            else None
+        )
 
         save_client_info(
             user_id=user.id,
             username=user.username,
             first_name=user.first_name,
             last_name=user.last_name,
-            phone=phone_saved
+            phone=phone_saved,
         )
 
-        # --- история ДО ---
+        # ----------------------------------------------
+        # Загружаем историю диалога.
+        # ----------------------------------------------
+
         history = get_last_messages(
             user.id,
             db_path=DB_PATH,
-            limit=CONTEXT_MESSAGE_COUNT
+            limit=CONTEXT_MESSAGE_COUNT,
         )
 
-        # =======================
-        # 🔥 ТЕЛЕФОН
-        # =======================
+        # ==================================================
+        # Обработка номера телефона.
+        # ==================================================
 
         phone = None
 
         if message.contact:
             phone = message.contact.phone_number
+
         elif is_phone(text):
             phone = text
 
         if phone:
+
             save_client_info(
                 user_id=user.id,
                 username=user.username,
                 first_name=user.first_name,
                 last_name=user.last_name,
-                phone=phone
+                phone=phone,
             )
 
-            full_history = append_if_not_duplicate(history, text)
+            full_history = append_if_not_duplicate(
+                history,
+                text,
+            )
 
-            msg = build_lead_message(
+            manager_message = build_lead_message(
                 user,
                 f"📞 Телефон: {phone}",
-                full_history
+                full_history,
             )
 
-            await notify_manager(context, msg)
-            await message.reply_text(CLIENT_LEAD_RESPONSE)
+            await notify_manager(
+                context,
+                manager_message,
+            )
+
+            await message.reply_text(
+                CLIENT_LEAD_RESPONSE,
+            )
 
             context.user_data["lead_sent"] = True
+
             return
 
-
-        # =======================
-        # 📍 ГЕОЛОКАЦИЯ КЛИЕНТА
-        # =======================
-
-        # Если клиент отправил Telegram-геолокацию,
-        # формируем полноценную заявку менеджеру,
-        # прикладываем историю переписки
-        # и отдельно отправляем точку на карте.
+        # ==================================================
+        # Обработка геолокации.
+        # ==================================================
 
         if message.location:
 
-            lat = message.location.latitude
-            lon = message.location.longitude
+            latitude = message.location.latitude
+            longitude = message.location.longitude
 
-            # Добавляем геолокацию в историю диалога,
-            # чтобы менеджер видел её в контексте заявки.
             full_history = append_if_not_duplicate(
                 history,
-                f"📍 Геолокация: {lat}, {lon}"
+                f"📍 Геолокация: "
+                f"{latitude}, {longitude}",
             )
 
-            # Формируем красивую карточку заявки.
-            msg = build_lead_message(
+            manager_message = build_lead_message(
                 user,
-                f"📍 Клиент отправил геолокацию",
-                full_history
+                "📍 Клиент отправил геолокацию",
+                full_history,
             )
 
-            # Отправляем текстовую заявку всем администраторам.
             await notify_manager(
                 context,
-                msg
+                manager_message,
             )
 
-            # Получаем список администраторов.
-            from database import get_all_admins
+            for admin in get_all_admins(DB_PATH):
 
-            admins = get_all_admins(DB_PATH)
-
-            # Отправляем каждому администратору
-            # настоящую Telegram-геолокацию.
-            for admin in admins:
                 try:
+
                     await context.bot.send_location(
                         chat_id=admin["user_id"],
-                        latitude=lat,
-                        longitude=lon
-                    )
-                except Exception as e:
-                    logger.error(
-                        f"Ошибка отправки геолокации админу "
-                        f"{admin['user_id']}: {e}"
+                        latitude=latitude,
+                        longitude=longitude,
                     )
 
-            # Красивое сообщение клиенту.
+                except Exception as error:
+
+                    logger.error(
+                        "Ошибка отправки "
+                        f"геолокации админу "
+                        f"{admin['user_id']}: {error}"
+                    )
+
             await message.reply_text(
                 "✅ Геолокация получена.\n\n"
-                "🚗 Ближайшая бригада уже получила адрес "
-                "и выехала к вам.\n\n"
-                "📞 При необходимости менеджер свяжется "
-                "с вами для уточнения деталей."
+                "🚗 Ближайшая бригада уже "
+                "получила адрес и выехала "
+                "к вам.\n\n"
+                "📞 При необходимости "
+                "менеджер свяжется с вами "
+                "для уточнения деталей."
             )
 
             context.user_data["lead_sent"] = True
+
             return
+        
+        # ==================================================
+        # Сохраняем сообщение пользователя.
+        # ==================================================
 
-
-        # =======================
-        # 🔥 СОХРАНЯЕМ СООБЩЕНИЕ
-        # =======================
-
-        add_message(user.id, "user", text)
+        add_message(
+            user.id,
+            "user",
+            text,
+        )
 
         history = get_last_messages(
             user.id,
             db_path=DB_PATH,
-            limit=CONTEXT_MESSAGE_COUNT
+            limit=CONTEXT_MESSAGE_COUNT,
         )
 
-        # =======================
-        # 🔥 ROUTER
-        # =======================
+        # ==================================================
+        # Определяем намерение пользователя.
+        # ==================================================
 
-        intent_data = classify_intent(text, history)
-        intent = intent_data.get("intent", "unknown")
-        
-        logger.info(f"[ROUTER] intent={intent} text={text}")
+        intent_data = classify_intent(
+            text,
+            history,
+        )
 
-        # =======================
-        # 🔥 RAG
-        # =======================
+        intent = intent_data.get(
+            "intent",
+            "unknown",
+        )
+
+        logger.info(
+            f"[ROUTER] intent={intent} text={text}"
+        )
+
+        # ==================================================
+        # Получаем контекст из RAG.
+        # ==================================================
 
         context_data = None
 
-        if intent in ["problem", "info"]:
-            context_data = retrieve_context(text)
+        if intent in (
+            "problem",
+            "info",
+        ):
+            context_data = retrieve_context(
+                text,
+            )
 
-        # =======================
-        # 🔥 GPT
-        # =======================
+        # ==================================================
+        # Генерируем ответ GPT.
+        # ==================================================
 
         answer = generate_answer(
             query=text,
             history=history,
-            context=context_data
+            context=context_data,
         )
 
-        # =======================
-        # 🔹 FALLBACK
-        # =======================
-
         if not answer:
-            answer = "Можете чуть подробнее описать ситуацию 👍"
+            answer = (
+                "Можете чуть подробнее "
+                "описать ситуацию 👍"
+            )
 
-        add_message(user.id, "assistant", answer)
-        await message.reply_text(answer)
+        add_message(
+            user.id,
+            "assistant",
+            answer,
+        )
 
-        # =======================
-        # 🔥 LEAD
-        # =======================
+        await message.reply_text(
+            answer,
+        )
 
-        if intent == "lead" and not context.user_data.get("lead_sent"):
+        # ==================================================
+        # Отправляем заявку менеджеру,
+        # если Router определил лид.
+        # ==================================================
+
+        if (
+            intent == "lead"
+            and not context.user_data.get(
+                "lead_sent"
+            )
+        ):
 
             full_history = get_last_messages(
                 user.id,
                 db_path=DB_PATH,
-                limit=CONTEXT_MESSAGE_COUNT
+                limit=CONTEXT_MESSAGE_COUNT,
             )
 
-            msg = build_lead_message(user, text, full_history)
+            manager_message = build_lead_message(
+                user,
+                text,
+                full_history,
+            )
 
-            await notify_manager(context, msg)
-            context.user_data["lead_sent"] = True
+            await notify_manager(
+                context,
+                manager_message,
+            )
 
-    except Exception as e:
-        logger.error(f"Ошибка handle_gpt_query: {e}", exc_info=True)
+            context.user_data[
+                "lead_sent"
+            ] = True
+
+    except Exception as error:
+
+        logger.exception(
+            f"Ошибка handle_gpt_query: "
+            f"{error}"
+        )
 
         try:
-            await update.message.reply_text("🔧 Ошибка обработки запроса")
+
+            await update.message.reply_text(
+                "🔧 Ошибка обработки запроса"
+            )
+
         except Exception:
             pass
 
+# ==========================================================
+# Отправка отложенных уведомлений.
+# ==========================================================
 
-# =======================
-# 🔹 ОЧЕРЕДЬ
-# =======================
+async def process_admin_queue(
+    app: Application,
+):
+    """
+    Отправляет администраторам
+    сообщения, которые ранее
+    не удалось доставить.
 
-async def process_admin_queue(app: Application):
-    for admin_id, messages in list(ADMIN_QUEUE.items()):
+    Returns:
+        None.
+    """
+
+    for admin_id, messages in list(
+        ADMIN_QUEUE.items()
+    ):
+
         if not messages:
             continue
 
         try:
+
             await app.bot.send_message(
                 chat_id=admin_id,
-                text="🔔 Пропущенные уведомления:\n" + "\n".join(messages)
+                text=(
+                    "🔔 Пропущенные уведомления:\n"
+                    + "\n".join(messages)
+                ),
             )
+
             ADMIN_QUEUE[admin_id] = []
+
         except Exception:
+
             continue
