@@ -40,11 +40,12 @@ from handlers.admin.constants import (
     AWAITING_RESTORE_CONFIRMATION,
 )
 
-from handlers.admin.users import (    
+from handlers.admin.users import (
     start_client_search,
     handle_search_query,
     show_chat_history,
     handle_chat_navigation,
+    handle_call_request,
 )
 
 from handlers.admin.client_messages import (
@@ -89,6 +90,7 @@ from handlers.admin_management import (
 )
 
 logger = logging.getLogger(__name__)
+
 
 def get_admin_handlers():
 
@@ -449,6 +451,10 @@ def get_admin_handlers():
         CallbackQueryHandler(
             handle_chat_navigation,
             pattern=r"^back_to_users$"
+        ),
+        CallbackQueryHandler(
+            handle_call_request,
+            pattern=r"^call_\d+$"
         ),
     ]
 

@@ -435,11 +435,8 @@ async def show_users_page(
         summary_text = f"👥 Страница {page + 1} из {total_pages}"
         await target.reply_text(summary_text, reply_markup=nav_keyboard)
     else:
-        back_keyboard = InlineKeyboardMarkup(
-            [[InlineKeyboardButton("🏠 В админку", callback_data="users_back")]]
-        )
-        await target.reply_text("✅ Конец списка.", reply_markup=back_keyboard)
-
+        await target.reply_text("✅ Конец списка.")
+        
 
 async def handle_users_navigation(
     update: Update,
