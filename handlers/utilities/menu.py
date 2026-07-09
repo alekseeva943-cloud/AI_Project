@@ -21,6 +21,11 @@ from handlers.utilities.services import (
     show_auto_help_submenu,
 )
 
+from handlers.utilities.nav_stack import (
+    push_state,
+    clear_stack,
+)
+
 
 # ==========================================================
 # Главное меню.
@@ -31,25 +36,21 @@ async def show_main_menu(
     context: ContextTypes.DEFAULT_TYPE,
 ):
     """
-    Показывает главное меню
-    и очищает временный контекст.
-
-    Returns:
-        None.
+    Показывает главное меню и очищает контекст навигации.
     """
-
     user = update.effective_user
 
-    # Очищаем временный контекст,
-    # используемый в текущем диалоге.
+    # Очищаем временный контекст
     context.user_data.pop("system_prompt", None)
     context.user_data.pop("help_topic", None)
+    
+    # Очищаем стек навигации при выходе в главное меню
+    clear_stack(context)
+    context.user_data.pop("admin_panel_shown", None)
 
     await update.message.reply_text(
         "Выберите услугу:",
-        reply_markup=get_main_keyboard(
-            is_admin_user=is_admin(user.id)
-        ),
+        reply_markup=get_main_keyboard(is_admin_user=is_admin(user.id)),
     )
 
 
@@ -63,12 +64,8 @@ async def show_help_menu(
 ):
     """
     Показывает меню помощи.
-
-    Returns:
-        None.
     """
-
-    context.user_data["previous_state"] = "main_menu"
+    push_state(context, "main_menu")
 
     await update.message.reply_text(
         "Здравствуйте! Что случилось?",
@@ -77,7 +74,7 @@ async def show_help_menu(
 
 
 # ==========================================================
-# Навигация.
+# Навигация (оставлено для совместимости с обычным меню)
 # ==========================================================
 
 async def go_back(
@@ -85,29 +82,19 @@ async def go_back(
     context: ContextTypes.DEFAULT_TYPE,
 ):
     """
-    Возвращает пользователя
-    в предыдущее меню.
-
-    Returns:
-        None.
+    Возвращает пользователя в предыдущее меню.
+    Используется для обычного (не админского) меню.
     """
-
-    state = context.user_data.get(
-        "previous_state"
-    )
+    from handlers.utilities.navigation import pop_state
+    
+    state = pop_state(context)
 
     if state == "help_menu":
         await show_help_menu(update, context)
-
     elif state == "services_menu":
         await handle_services(update, context)
-
     elif state == "auto_help_submenu":
-        await show_auto_help_submenu(
-            update,
-            context,
-        )
-
+        await show_auto_help_submenu(update, context)
     else:
         await show_main_menu(update, context)
 
@@ -117,20 +104,9 @@ async def cancel_current_action(
     context: ContextTypes.DEFAULT_TYPE,
 ):
     """
-    Отменяет текущий сценарий
-    и возвращает пользователя в меню,
-    которое было сохранено в cancel_target.
-
-    Если cancel_target не задан, 
-    использует стандартную функцию go_back.
-
-    Returns:
-        ConversationHandler.END.
+    Отменяет текущий сценарий и возвращает в меню.
     """
-
-    target = context.user_data.get(
-        "cancel_target"
-    )
+    target = context.user_data.get("cancel_target")
 
     if target:
         await target(update, context)

@@ -22,6 +22,7 @@ from config.admin_keyboards import (
     get_stats_keyboard,
     get_top_requests_keyboard,
 )
+
 from database import (
     get_detailed_stats,
     get_top_requests,
@@ -44,10 +45,8 @@ async def show_top_requests_menu(
     context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
     """
-    Показывает меню выбора периода 
-    для анализа популярных запросов.
+    Показывает меню выбора периода для топ-запросов.
     """
-
     await update.message.reply_text(
         "📊 Выберите период для анализа популярных запросов:",
         reply_markup=get_top_requests_keyboard(),
@@ -59,10 +58,8 @@ async def show_stats_menu(
     context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
     """
-    Показывает меню выбора периода 
-    для просмотра статистики проекта.
+    Показывает меню выбора периода для статистики проекта.
     """
-
     await update.message.reply_text(
         "📈 Выберите период статистики:",
         reply_markup=get_stats_keyboard(),
@@ -79,11 +76,10 @@ async def handle_top_requests_period(
     period_text: str,
 ) -> None:
     """
-    Показывает самые популярные
-    обращения пользователей
-    за выбранный период.
+    Показывает самые популярные обращения за выбранный период.
+    После показа результата обновляет стек, чтобы "Назад" 
+    вёл обратно к выбору периода.
     """
-
     del context
 
     period_map = {
@@ -93,72 +89,39 @@ async def handle_top_requests_period(
         btn.BTN_PERIOD_YEAR: 365,
     }
 
-    days = period_map.get(
-        period_text,
-        7,
-    )
+    days = period_map.get(period_text, 7)
 
-    logger.info(
-        f"[TOP REQUESTS] "
-        f"period={period_text}, days={days}"
-    )
+    logger.info(f"[TOP REQUESTS] period={period_text}, days={days}")
 
-    top_requests = get_top_requests(
-        days=days,
-    )
+    top_requests = get_top_requests(days=days)
 
     if not top_requests:
-
         await update.message.reply_text(
             f"📭 Нет данных за {period_text}.",
-            reply_markup=get_admin_keyboard(),
+            reply_markup=get_top_requests_keyboard(),
         )
-
         return
 
-    total = sum(
-        count
-        for _, count in top_requests
-    )
+    total = sum(count for _, count in top_requests)
 
-    report = (
-        f"📊 Топ запросов "
-        f"за {period_text}:\n\n"
-    )
+    report = f"📊 Топ запросов за {period_text}:\n\n"
 
     emojis = [
         "1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣",
         "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟",
     ]
 
-    for index, (topic, count) in enumerate(
-        top_requests
-    ):
+    for index, (topic, count) in enumerate(top_requests):
+        emoji = emojis[index] if index < len(emojis) else "•"
+        percent = round(count / total * 100, 1) if total else 0
+        report += f"{emoji} {topic}: {count} ({percent}%)\n"
 
-        emoji = (
-            emojis[index]
-            if index < len(emojis)
-            else "•"
-        )
+    report += f"\nВсего обращений: {total}"
 
-        percent = (
-            round(count / total * 100, 1)
-            if total
-            else 0
-        )
-
-        report += (
-            f"{emoji} {topic}: "
-            f"{count} ({percent}%)\n"
-        )
-
-    report += (
-        f"\nВсего обращений: {total}"
-    )
-
+    # Возвращаем клавиатуру выбора периода, а не корня!
     await update.message.reply_text(
         report,
-        reply_markup=get_admin_keyboard(),
+        reply_markup=get_top_requests_keyboard(),
     )
 
 
@@ -172,16 +135,11 @@ async def handle_stats_period(
     period_text: str,
 ) -> None:
     """
-    Показывает статистику пользователей
-    за выбранный период.
+    Показывает статистику пользователей за выбранный период.
+    После показа результата возвращает клавиатуру выбора периода.
     """
-
     del context
 
-    # TODO: В текущей реализации database.get_detailed_stats() 
-    # не поддерживает фильтрацию по дням (аргумент days).
-    # Сейчас всегда отдается общая статистика.
-    # Чтобы работало по периодам, нужно доработать функцию в БД.
     stats = get_detailed_stats()
 
     report = (
@@ -194,10 +152,11 @@ async def handle_stats_period(
         f"📅 <b>Активных пользователей:</b> {stats['active_last_30_days']}"
     )
 
+    # Возвращаем клавиатуру выбора периода, а не корня!
     await update.message.reply_text(
         report,
         parse_mode="HTML",
-        reply_markup=get_admin_keyboard(),
+        reply_markup=get_stats_keyboard(),
     )
 
 
@@ -210,22 +169,15 @@ async def show_stats(
     context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
     """
-    Показывает расширенную статистику проекта
-    за все время.
+    Показывает расширенную статистику проекта за все время.
     """
-
     del context
 
     try:
-
         stats = get_detailed_stats()
 
         if not stats:
-
-            await update.message.reply_text(
-                "❌ Не удалось загрузить статистику"
-            )
-
+            await update.message.reply_text("❌ Не удалось загрузить статистику")
             return
 
         report = (
@@ -239,17 +191,8 @@ async def show_stats(
             f"📅 <b>Активных за 30 дней:</b> {stats['active_last_30_days']}"
         )
 
-        await update.message.reply_text(
-            report,
-            parse_mode="HTML",
-        )
+        await update.message.reply_text(report, parse_mode="HTML")
 
     except Exception as error:
-
-        logger.exception(
-            f"Ошибка статистики: {error}"
-        )
-
-        await update.message.reply_text(
-            "❌ Ошибка при загрузке данных"
-        )
+        logger.exception(f"Ошибка статистики: {error}")
+        await update.message.reply_text("❌ Ошибка при загрузке данных")

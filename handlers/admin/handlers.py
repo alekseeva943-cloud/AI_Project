@@ -14,8 +14,10 @@ handlers/admin/handlers.py
 
 import logging
 
+from telegram import Update
 from telegram.ext import (
     CallbackQueryHandler,
+    ContextTypes,
     ConversationHandler,
     MessageHandler,
     filters,
@@ -91,6 +93,25 @@ from handlers.admin_management import (
 
 logger = logging.getLogger(__name__)
 
+
+# ======================================================
+# Вспомогательная функция для сохранения состояния
+# перед переходом в меню админов (из настроек).
+# ======================================================
+async def _open_admins_menu(
+    update: Update, 
+    context: ContextTypes.DEFAULT_TYPE
+):
+    """
+    Обертка для перехода в меню админов.
+    Сначала сохраняет 'settings_menu' в стек навигации, 
+    затем вызывает оригинальную функцию показа меню.
+    """
+    from handlers.utilities.nav_stack import push_state
+    from handlers.admin_management import show_admins_menu
+    
+    push_state(context, "settings_menu")
+    await show_admins_menu(update, context)
 
 def get_admin_handlers():
 
@@ -485,7 +506,7 @@ def get_admin_handlers():
 
         MessageHandler(
             filters.Text(btn.BTN_ADMINS),
-            show_admins_menu
+            _open_admins_menu
         ),
 
         # ==================================================

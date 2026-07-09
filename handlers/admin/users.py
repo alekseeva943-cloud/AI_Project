@@ -19,6 +19,7 @@ import re
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes, ConversationHandler
 
+from handlers.utilities.nav_stack import push_state
 from config import buttons as btn
 from config.admin_keyboards import get_admin_keyboard
 from config.keyboards import get_cancel_keyboard
@@ -396,10 +397,8 @@ async def show_users_page(
 ) -> None:
     """
     Показывает страницу списка пользователей.
-    Отправляет каждого клиента отдельным сообщением с inline-кнопками.
-    В конце отправляет панель навигации между страницами.
     """
-
+   
     offset = page * PAGE_SIZE
     clients = get_clients_paginated(offset=offset, limit=PAGE_SIZE)
     total = get_total_clients_count()
@@ -413,15 +412,12 @@ async def show_users_page(
         await target.reply_text(text, reply_markup=keyboard)
         return
 
-    # Определяем, куда отправлять сообщения (CallbackQuery или обычное сообщение)
     target = update.callback_query.message if update.callback_query else update.message
 
-    # Отправляем каждого клиента отдельным сообщением
     for client in clients:
         client_text, inline_keyboard = format_client(client)
         await target.reply_text(client_text, reply_markup=inline_keyboard)
 
-    # Формируем навигацию в последнем сообщении
     nav_buttons = []
     if page > 0:
         nav_buttons.append(InlineKeyboardButton(btn.BTN_PREVIOUS, callback_data=f"users_page_{page - 1}"))
@@ -436,7 +432,7 @@ async def show_users_page(
         await target.reply_text(summary_text, reply_markup=nav_keyboard)
     else:
         await target.reply_text("✅ Конец списка.")
-        
+
 
 async def handle_users_navigation(
     update: Update,
