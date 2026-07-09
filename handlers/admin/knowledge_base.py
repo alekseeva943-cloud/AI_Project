@@ -59,6 +59,8 @@ from handlers.admin.constants import (
     AWAITING_RAG_SOURCE_URL,
     AWAITING_ACTIVATE_CONFIRMATION,
     AWAITING_RESTORE_CONFIRMATION,
+    DEFAULT_CRAWL_LIMIT,
+    DEFAULT_RAG_SOURCE,
 )
 
 from handlers.admin.panel import (
@@ -85,13 +87,6 @@ from services.rag_service import (
 
 logger = logging.getLogger(__name__)
 
-# ==========================================================
-# Значения по умолчанию
-# ==========================================================
-
-DEFAULT_CRAWL_LIMIT = 4
-
-DEFAULT_RAG_SOURCE = "https://professional24.ru"
 
 # ==========================================================
 # Вспомогательные функции
